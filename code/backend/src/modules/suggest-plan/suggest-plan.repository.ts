@@ -1,0 +1,435 @@
+import { prisma } from "../../config/prisma";
+import { Prisma } from "../../../prisma/generated/prisma/client";
+import { DAILY_PLAN_NUTRIENT_NAMES } from "../../constants/nutrient-names";
+
+const MACRO_NUTRIENT_NAMES = [...DAILY_PLAN_NUTRIENT_NAMES];
+export const MAX_SUGGEST_PLAN_DAYS = 14;
+const DEFAULT_PLAN_NAME = "Thực đơn mới";
+
+function templatePlanDate(suggestPlanId: number, dayIndex: number): Date {
+  const offset = suggestPlanId * 20 + dayIndex;
+  const d = new Date("2099-01-01T00:00:00.000Z");
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d;
+}
+
+const dailyPlanMealsInclude = {
+  daily_menus: {
+    include: {
+      meal: {
+        include: {
+          meal_menus: {
+            include: {
+              dish: {
+                include: {
+                  dish_nutrients: {
+                    where: {
+                      nutrient: { name: { in: MACRO_NUTRIENT_NAMES } },
+                    },
+                    select: {
+                      value: true,
+                      nutrient: { select: { name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+const listDaysInclude = {
+  suggest_plan_days: {
+    orderBy: { day_index: "asc" as const },
+    include: {
+      daily_plan: {
+        include: {
+          daily_menus: {
+            include: {
+              meal: {
+                select: {
+                  meal_type: true,
+                  meal_menus: { select: { dish_id: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+function buildListWhere(search: string): Prisma.SuggestPlanWhereInput {
+  if (!search) return {};
+  return {
+    OR: [
+      { name: { contains: search, mode: "insensitive" } },
+      { description: { contains: search, mode: "insensitive" } },
+    ],
+  };
+}
+
+function buildPublicListWhere(search: string): Prisma.SuggestPlanWhereInput {
+  const publicOnly: Prisma.SuggestPlanWhereInput = { is_public: true };
+  if (!search) return publicOnly;
+  return {
+    AND: [
+      publicOnly,
+      {
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+        ],
+      },
+    ],
+  };
+}
+
+function buildPublicListOrderBy(
+  sort: "created_desc" | "created_asc",
+): Prisma.SuggestPlanOrderByWithRelationInput {
+  return sort === "created_asc"
+    ? { created_at: "asc" }
+    : { created_at: "desc" };
+}
+
+export type SuggestPlanListSort =
+  | "created_desc"
+  | "created_asc"
+  | "public_first"
+  | "hidden_first";
+
+function buildListOrderBy(
+  sort: SuggestPlanListSort,
+):
+  | Prisma.SuggestPlanOrderByWithRelationInput
+  | Prisma.SuggestPlanOrderByWithRelationInput[] {
+  switch (sort) {
+    case "created_asc":
+      return { created_at: "asc" };
+    case "public_first":
+      return [{ is_public: "desc" }, { created_at: "desc" }];
+    case "hidden_first":
+      return [{ is_public: "asc" }, { created_at: "desc" }];
+    default:
+      return { created_at: "desc" };
+  }
+}
+
+export const suggestPlanRepository = {
+  findManyForList(
+    search: string,
+    skip: number,
+    take: number,
+    sort: SuggestPlanListSort = "created_desc",
+  ) {
+    return prisma.suggestPlan.findMany({
+      where: buildListWhere(search),
+      include: listDaysInclude,
+      orderBy: buildListOrderBy(sort),
+      skip,
+      take,
+    });
+  },
+
+  countForList(search: string) {
+    return prisma.suggestPlan.count({ where: buildListWhere(search) });
+  },
+
+  findManyPublicForList(
+    search: string,
+    skip: number,
+    take: number,
+    sort: "created_desc" | "created_asc" = "created_desc",
+  ) {
+    return prisma.suggestPlan.findMany({
+      where: buildPublicListWhere(search),
+      select: {
+        suggest_plan_id: true,
+        name: true,
+        description: true,
+        image_url: true,
+        day_count: true,
+      },
+      orderBy: buildPublicListOrderBy(sort),
+      skip,
+      take,
+    });
+  },
+
+  countPublicForList(search: string) {
+    return prisma.suggestPlan.count({ where: buildPublicListWhere(search) });
+  },
+
+  findPublicByIdWithDays(suggestPlanId: number) {
+    return prisma.suggestPlan.findFirst({
+      where: {
+        suggest_plan_id: suggestPlanId,
+        is_public: true,
+      },
+      include: {
+        suggest_plan_days: {
+          orderBy: { day_index: "asc" },
+          include: {
+            daily_plan: {
+              include: dailyPlanMealsInclude,
+            },
+          },
+        },
+      },
+    });
+  },
+
+  findByIdWithDays(suggestPlanId: number) {
+    return prisma.suggestPlan.findUnique({
+      where: { suggest_plan_id: suggestPlanId },
+      include: {
+        suggest_plan_days: {
+          orderBy: { day_index: "asc" },
+          include: {
+            daily_plan: {
+              include: dailyPlanMealsInclude,
+            },
+          },
+        },
+      },
+    });
+  },
+
+  /** null nếu không tồn tại hoặc không thuộc admin (template của admin đó) */
+  async findOwnedByAdmin(suggestPlanId: number, adminUserId: number) {
+    const plan = await prisma.suggestPlan.findUnique({
+      where: { suggest_plan_id: suggestPlanId },
+      include: {
+        suggest_plan_days: {
+          include: {
+            daily_plan: {
+              select: { user_id: true, is_template: true },
+            },
+          },
+        },
+      },
+    });
+    if (!plan) return null;
+    if (plan.suggest_plan_days.length === 0) return null;
+
+    const owned = plan.suggest_plan_days.every(
+      (d) =>
+        d.daily_plan.user_id === adminUserId &&
+        d.daily_plan.is_template === true,
+    );
+    return owned ? plan : null;
+  },
+
+  createWithEmptyDays(
+    adminUserId: number,
+    name?: string,
+    dayCount = 1,
+  ): Promise<number> {
+    return prisma.$transaction(async (tx) => {
+      const plan = await tx.suggestPlan.create({
+        data: {
+          name: name?.trim() || DEFAULT_PLAN_NAME,
+          day_count: dayCount,
+        },
+        select: { suggest_plan_id: true },
+      });
+
+      for (let dayIndex = 1; dayIndex <= dayCount; dayIndex++) {
+        const dailyPlan = await tx.dailyPlan.create({
+          data: {
+            user_id: adminUserId,
+            daily_plan_date: templatePlanDate(plan.suggest_plan_id, dayIndex),
+            is_template: true,
+          },
+          select: { daily_plan_id: true },
+        });
+
+        await tx.suggestPlanDay.create({
+          data: {
+            suggest_plan_id: plan.suggest_plan_id,
+            daily_plan_id: dailyPlan.daily_plan_id,
+            day_index: dayIndex,
+          },
+        });
+      }
+
+      return plan.suggest_plan_id;
+    });
+  },
+
+  updateMetadata(suggestPlanId: number, data: Prisma.SuggestPlanUpdateInput) {
+    return prisma.suggestPlan.update({
+      where: { suggest_plan_id: suggestPlanId },
+      data,
+    });
+  },
+
+  setPublic(suggestPlanId: number, isPublic: boolean) {
+    return prisma.suggestPlan.update({
+      where: { suggest_plan_id: suggestPlanId },
+      data: { is_public: isPublic },
+      select: {
+        suggest_plan_id: true,
+        is_public: true,
+      },
+    });
+  },
+
+  deleteById(suggestPlanId: number) {
+    return prisma.$transaction(async (tx) => {
+      const days = await tx.suggestPlanDay.findMany({
+        where: { suggest_plan_id: suggestPlanId },
+        select: { daily_plan_id: true },
+      });
+
+      for (const day of days) {
+        await tx.dailyPlan.delete({
+          where: { daily_plan_id: day.daily_plan_id },
+        });
+      }
+
+      await tx.suggestPlan.delete({
+        where: { suggest_plan_id: suggestPlanId },
+      });
+    });
+  },
+
+  addEmptyDay(suggestPlanId: number, adminUserId: number) {
+    return prisma.$transaction(async (tx) => {
+      const plan = await tx.suggestPlan.findUnique({
+        where: { suggest_plan_id: suggestPlanId },
+        select: { day_count: true },
+      });
+      if (!plan || plan.day_count >= MAX_SUGGEST_PLAN_DAYS) return null;
+
+      const dayIndex = plan.day_count + 1;
+
+      const dailyPlan = await tx.dailyPlan.create({
+        data: {
+          user_id: adminUserId,
+          daily_plan_date: templatePlanDate(suggestPlanId, dayIndex),
+          is_template: true,
+        },
+        select: { daily_plan_id: true },
+      });
+
+      await tx.suggestPlanDay.create({
+        data: {
+          suggest_plan_id: suggestPlanId,
+          daily_plan_id: dailyPlan.daily_plan_id,
+          day_index: dayIndex,
+        },
+      });
+
+      await tx.suggestPlan.update({
+        where: { suggest_plan_id: suggestPlanId },
+        data: { day_count: dayIndex },
+      });
+
+      return {
+        dayIndex,
+        dailyPlanId: dailyPlan.daily_plan_id,
+        dayCount: dayIndex,
+      };
+    });
+  },  removeDayAtIndex(suggestPlanId: number, dayIndex: number) {
+    return prisma.$transaction(async (tx) => {
+      const plan = await tx.suggestPlan.findUnique({
+        where: { suggest_plan_id: suggestPlanId },
+        select: { day_count: true },
+      });
+      if (!plan || plan.day_count <= 1) {
+        return { ok: false as const, reason: "min_days" as const };
+      }
+      if (dayIndex < 1 || dayIndex > plan.day_count) {
+        return { ok: false as const, reason: "invalid_day" as const };
+      }
+
+      const link = await tx.suggestPlanDay.findUnique({
+        where: {
+          suggest_plan_id_day_index: {
+            suggest_plan_id: suggestPlanId,
+            day_index: dayIndex,
+          },
+        },
+        select: { daily_plan_id: true },
+      });
+      if (!link) {
+        return { ok: false as const, reason: "not_found" as const };
+      }      await tx.dailyPlan.delete({
+        where: { daily_plan_id: link.daily_plan_id },
+      });      const toReindex = await tx.suggestPlanDay.findMany({
+        where: {
+          suggest_plan_id: suggestPlanId,
+          day_index: { gt: dayIndex },
+        },
+        orderBy: { day_index: "desc" },
+        select: { daily_plan_id: true, day_index: true },
+      });
+
+      for (const row of toReindex) {
+        await tx.suggestPlanDay.update({
+          where: {
+            suggest_plan_id_daily_plan_id: {
+              suggest_plan_id: suggestPlanId,
+              daily_plan_id: row.daily_plan_id,
+            },
+          },
+          data: { day_index: row.day_index - 1 },
+        });
+      }
+
+      const newDayCount = plan.day_count - 1;
+      await tx.suggestPlan.update({
+        where: { suggest_plan_id: suggestPlanId },
+        data: { day_count: newDayCount },
+      });
+
+      return {
+        ok: true as const,
+        dayCount: newDayCount,
+        deletedDayIndex: dayIndex,
+      };
+    });
+  },
+
+  findDailyPlanLink(suggestPlanId: number, dayIndex: number) {
+    return prisma.suggestPlanDay.findUnique({
+      where: {
+        suggest_plan_id_day_index: {
+          suggest_plan_id: suggestPlanId,
+          day_index: dayIndex,
+        },
+      },
+      select: {
+        daily_plan_id: true,
+        day_index: true,
+      },
+    });
+  },
+
+  isMealInPublicSuggestPlan(mealId: number) {
+    return prisma.meal.findFirst({
+      where: {
+        meal_id: mealId,
+        daily_menus: {
+          some: {
+            daily_plan: {
+              suggest_plan_days: {
+                some: {
+                  suggest_plan: { is_public: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      select: { meal_id: true },
+    });
+  },
+};

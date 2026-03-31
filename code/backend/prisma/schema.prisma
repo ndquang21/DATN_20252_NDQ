@@ -7,11 +7,217 @@ datasource db {
   provider = "postgresql"
 }
 
+//===================  (User & Auth) ===================//
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user_id        Int            @id @default(autoincrement())
+  username       String
+  email          String         @unique
+  password       String
+  role           Role           @default(user)
+  avatar_url     String?        @default("https://res.cloudinary.com/dmsaxoicv/image/upload/v1780986989/default_avatar.jpg")
+  gender         Gender?
+  dob            DateTime?
+  height         Float?
+  weight         Float?
+  activity_level ActivityLevel?
+  TDEE           Float?
+  goal           Goal?
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  refresh_tokens         RefreshToken[]
+  password_reset_tokens  PasswordResetToken[]
+  daily_plans            DailyPlan[]
+  dishes                 Dish[]                 @relation("UserDishes")
+  tracked_nutrients      UserTrackedNutrient[]
 }
+
+enum Role {
+  user
+  admin
+}
+
+enum Gender {
+  male
+  female
+}
+
+enum ActivityLevel {
+  sedentary
+  light
+  moderate
+  active
+  very_active
+}
+
+enum Goal {
+  lose_weight
+  maintain
+  gain_weight
+}
+
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  user_id    Int
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  user_id    Int
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+//===================  Hết User & Auth ===================//
+
+//=================== Daily plan ===================//
+model DailyPlan {
+  daily_plan_id   Int      @id @default(autoincrement())
+  user_id         Int
+  daily_plan_date DateTime @db.Date
+  is_template     Boolean  @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user              User              @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  daily_menus       DailyMenu[]
+  suggest_plan_days SuggestPlanDay[]
+}
+
+model DailyMenu {
+  daily_plan_id Int
+  meal_id       Int
+
+  daily_plan DailyPlan @relation(fields: [daily_plan_id], references: [daily_plan_id], onDelete: Cascade)
+  meal       Meal      @relation(fields: [meal_id], references: [meal_id], onDelete: Cascade)
+
+  @@id([daily_plan_id, meal_id])
+}
+//=================== Hết Daily plan ===================//
+
+//=================== Meal ===================//
+model Meal {
+  meal_id     Int      @id @default(autoincrement())
+  meal_type   MealType
+  is_finished Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  daily_menus DailyMenu[]
+  meal_menus  MealMenu[]
+}
+
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+model MealMenu {
+  meal_id  Int
+  dish_id  Int
+  quantity Float
+
+  meal Meal @relation(fields: [meal_id], references: [meal_id], onDelete: Cascade)
+  dish Dish @relation(fields: [dish_id], references: [dish_id], onDelete: Cascade)
+
+  @@id([meal_id, dish_id])
+}
+//=================== Hết Meal ===================//
+
+//=================== Dishes  ===================//
+model Dish {
+  dish_id    Int      @id @default(autoincrement())
+  dish_name  String
+  created_by Int
+  is_global  Boolean  @default(true)
+  image_url  String?  @default("https://res.cloudinary.com/dmsaxoicv/image/upload/v1780986989/default_dish.png")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  creator        User           @relation("UserDishes", fields: [created_by], references: [user_id], onDelete: Cascade)
+  meal_menus     MealMenu[]
+  dish_nutrients DishNutrient[]
+
+  @@unique([dish_name, created_by])
+}
+
+model DishNutrient {
+  dish_id     Int
+  nutrient_id Int
+  value       Float
+
+  dish     Dish     @relation(fields: [dish_id], references: [dish_id], onDelete: Cascade)
+  nutrient Nutrient @relation(fields: [nutrient_id], references: [nutrient_id], onDelete: Cascade)
+
+  @@id([dish_id, nutrient_id])
+}
+//=================== Hết Dishes  ===================//
+
+//=================== Nutrients ===================//
+model Nutrient {
+  nutrient_id Int          @id @default(autoincrement())
+  name        String       @unique
+  is_macro    Boolean      @default(false)
+  unit        NutrientUnit
+
+  dish_nutrients    DishNutrient[]
+  tracked_by_users  UserTrackedNutrient[]
+}
+
+enum NutrientUnit {
+  kcal
+  g
+  mg
+  mcg
+}
+
+// User chọn 3 chất muốn theo dõi (giới hạn enforce ở API)
+model UserTrackedNutrient {
+  user_id     Int
+  nutrient_id Int
+  sort_order  Int      @default(0)
+  created_at  DateTime @default(now())
+
+  user     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  nutrient Nutrient @relation(fields: [nutrient_id], references: [nutrient_id], onDelete: Cascade)
+
+  @@id([user_id, nutrient_id])
+  @@unique([user_id, sort_order])
+}
+//=================== Hết Nutrients ===================//
+
+//=================== Suggest Plan ===================//
+model SuggestPlan {
+  suggest_plan_id Int      @id @default(autoincrement())
+  name            String
+  description     String?
+  day_count       Int
+  is_public       Boolean  @default(false)
+  image_url       String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  suggest_plan_days SuggestPlanDay[]
+}
+
+model SuggestPlanDay {
+  suggest_plan_id Int
+  daily_plan_id   Int
+  day_index       Int
+
+  suggest_plan SuggestPlan @relation(fields: [suggest_plan_id], references: [suggest_plan_id], onDelete: Cascade)
+  daily_plan   DailyPlan   @relation(fields: [daily_plan_id], references: [daily_plan_id], onDelete: Cascade)
+
+  @@id([suggest_plan_id, daily_plan_id])
+  @@unique([suggest_plan_id, day_index])
+}
+//=================== Hết Suggest Plan ===================//
