@@ -4,3 +4,4 @@ node_modules
 # Ignore Prisma Client generated code
 prisma/migrations/
 prisma/generated/
+prisma/migrations/

@@ -1,0 +1,57 @@
+import { NutrientUnit } from "../../../prisma/generated/prisma/client";
+
+export type DishSearchItemDTO = {
+  dishId: number;
+  name: string;
+  imageUrl: string | null;
+  caloriesPer100g: number;
+};
+
+export type DishSearchResponseDTO = {
+  items: DishSearchItemDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type MyDishItemDTO = {
+  dishId: number;
+  name: string;
+  imageUrl: string | null;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbPer100g: number;
+  fatPer100g: number;
+};
+
+export type MyDishesResponseDTO = {
+  items: MyDishItemDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type CreateDishResponseDTO = MyDishItemDTO;
+
+export type MyDishNutrientDTO = {
+  nutrientId: number;
+  name: string;
+  unit: NutrientUnit;
+  value: number;
+};
+
+export type MyDishDetailDTO = {
+  dishId: number;
+  name: string;
+  imageUrl: string | null;
+  nutrients: MyDishNutrientDTO[];
+};export type AdminGlobalDishListItemDTO = MyDishItemDTO;
+
+export type AdminGlobalDishListResponseDTO = {
+  items: AdminGlobalDishListItemDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type AdminGlobalDishDetailDTO = MyDishDetailDTO;
