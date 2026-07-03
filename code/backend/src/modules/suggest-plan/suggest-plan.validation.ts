@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { MAX_SUGGEST_PLAN_DAYS } from "../../constants/suggest-plan";
 
-const MAX_DAY_COUNT = 14;
 export const suggestPlanListSortSchema = z.enum([
   "created_desc",
   "created_asc",
@@ -21,7 +21,7 @@ export const suggestPlanIdParamSchema = z.object({
 
 export const suggestPlanDayParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
-  dayIndex: z.coerce.number().int().min(1).max(MAX_DAY_COUNT),
+  dayIndex: z.coerce.number().int().min(1).max(MAX_SUGGEST_PLAN_DAYS),
 });
 
 export const createSuggestPlanBodySchema = z.object({
@@ -35,7 +35,7 @@ export const createSuggestPlanBodySchema = z.object({
     .number()
     .int()
     .min(1, "Ít nhất 1 ngày")
-    .max(MAX_DAY_COUNT, `Tối đa ${MAX_DAY_COUNT} ngày`)
+    .max(MAX_SUGGEST_PLAN_DAYS, `Tối đa ${MAX_SUGGEST_PLAN_DAYS} ngày`)
     .optional(),
 });
 
@@ -103,7 +103,7 @@ export const applySuggestPlanBodySchema = z.discriminatedUnion("scope", [
   }),
   z.object({
     scope: z.literal("day"),
-    sourceDayIndex: z.coerce.number().int().min(1).max(MAX_DAY_COUNT),
+    sourceDayIndex: z.coerce.number().int().min(1).max(MAX_SUGGEST_PLAN_DAYS),
     targetDate: dateStrSchema,
   }),
   z.object({

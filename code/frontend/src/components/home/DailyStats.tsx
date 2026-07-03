@@ -7,7 +7,7 @@ import type { NutrientUnit } from "../../types/nutrient";
 
 const ZERO: NutrientTotals = { calories: 0, protein: 0, carb: 0, fat: 0 };
 
-type DailyFuelProps = {
+type DailyStatsProps = {
   summary: DailyPlanSummary | null;
   trackedNutrients: TrackedNutrientDay[];
   tdee: number | null;
@@ -35,7 +35,7 @@ function formatTrackedValue(value: number, unit: NutrientUnit): string {
   return `${rounded} ${unit}`;
 }
 
-export default function DailyFuel({
+export default function DailyStats({
   summary,
   trackedNutrients,
   tdee,
@@ -43,7 +43,7 @@ export default function DailyFuel({
   isToday = false,
   className = "",
   onEditTracked,
-}: DailyFuelProps) {
+}: DailyStatsProps) {
   const completed = summary?.completed ?? ZERO;
   const showProgress = isToday && tdee != null && tdee > 0;
   const caloriePercent = showProgress

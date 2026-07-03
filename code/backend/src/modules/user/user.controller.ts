@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServerError } from "../../utils/http.util";
 import { userService } from "./user.service";
 import {
   createUserSchema,
@@ -6,30 +7,10 @@ import {
   listUsersQuerySchema,
   updateTrackedNutrientsSchema,
 } from "./user.validation";
-import { v2 as cloudinary } from "cloudinary";
-
-
-// Hàm trích id từ URL
-// Vd: https://res.cloudinary.com/dmsaxoicv/image/upload/v1780981426/foodi/avatars/avatar_1780981425851.jpg
-// -> "foodi/avatars/avatar_1780981425851"
-
-const getPublicIdFromUrl = (url: string): string | null => {
-  try {
-    const parts = url.split("/upload/");
-    if (parts.length < 2) return null;
-
-    const publicIdWithExt = parts[1].split("/").slice(1).join("/");
-
-    const publicId = publicIdWithExt.split(".").slice(0, -1).join(".");
-    return publicId;
-  } catch (error) {
-    console.error("Lỗi khi trích xuất public_id:", error);
-    return null;
-  }
-};
+import { destroyCloudinaryImage } from "../../config/cloudinary";
 
 export const userController = {
-  async getAllUsers(req: Request, res: Response) {
+  async listUsers(req: Request, res: Response) {
     try {
       const parsed = listUsersQuerySchema.safeParse(req.query);
       if (!parsed.success) {
@@ -42,11 +23,8 @@ export const userController = {
       const { search, page, pageSize } = parsed.data;
       const result = await userService.listForAdmin(search, page, pageSize);
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -63,11 +41,8 @@ export const userController = {
       }
 
       return res.json(user);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -77,15 +52,10 @@ export const userController = {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
 
-      const userInfoAndMetrics = await userService.getMyBasicInfo(
-        req.user.userId,
-      );
-      return res.json(userInfoAndMetrics);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+      const profile = await userService.getMyProfile(req.user.userId);
+      return res.json(profile);
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -150,11 +120,8 @@ export const userController = {
 
       const result = await userService.getTrackedNutrients(req.user.userId);
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -197,17 +164,7 @@ export const userController = {
       }
 
       const currentUser = await userService.getUserById(req.user.userId);
-
-      if (
-        currentUser?.avatar_url &&
-        !currentUser.avatar_url.includes("default_avatar")
-      ) {
-        const oldPublicId = getPublicIdFromUrl(currentUser.avatar_url);
-        if (oldPublicId) {
-          await cloudinary.uploader.destroy(oldPublicId);
-          console.log(`[Cloudinary] Đã dọn dẹp xong file cũ: ${oldPublicId}`);
-        }
-      }
+      await destroyCloudinaryImage(currentUser?.avatar_url);
 
       const avatarUrl = fileData.path;
 
@@ -248,20 +205,17 @@ export const userController = {
     }
   },
 
-  async deleteUser(req: Request<{ id: string }>, res: Response) {
+  async remove(req: Request<{ id: string }>, res: Response) {
     try {
       const userId = parseInt(req.params.id, 10);
       if (Number.isNaN(userId)) {
         return res.status(400).json({ error: "Invalid id" });
       }
 
-      const deleteUser = await userService.deleteUser(userId);
-      return res.json(deleteUser);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+      const deleted = await userService.remove(userId);
+      return res.json(deleted);
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 };

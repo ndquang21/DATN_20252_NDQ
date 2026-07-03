@@ -60,8 +60,6 @@ import type {
     imageUrl?: string | null;
   };
   
-  export type UpdateSuggestPlanResponseDTO = SuggestPlanDetailDTO;
-  
   export type PublishSuggestPlanBodyDTO = {
     isPublic: boolean;
   };

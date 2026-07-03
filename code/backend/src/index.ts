@@ -32,13 +32,13 @@ app.use("/nutrients", nutrientRouter);
 app.use("/suggest-plans", suggestPlanRouter);
 app.use("/admin/dashboard", adminDashboardRouter);
 
-const PORT = process.env.PORT;
+app.get("/", (req, res) => {
+  res.send("Hello World!");
+});
+
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`http://localhost:${PORT}`);
-});
-
-app.get("/", (req, res) => {
-  res.send("Hello World!");
 });

@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { Role } from "../../../prisma/generated/prisma/client";
 
+// Admin chỉ tạo được tài khoản người dùng thường: không nhận 'role' từ input.
+// Nếu client cố gửi role, Zod sẽ loại bỏ; tài khoản mới mặc định role='user' (default ở DB).
 export const createUserSchema = z.object({
   email: z.email("Email không hợp lệ"),
   password: z.string().min(6, "Mật khẩu tối thiểu 6 ký tự"),
   username: z.string().min(2, "Username tối thiểu 2 ký tự"),
-  role: z.enum(Role),
 });
 
 export const updateBasicInfoSchema = z.object({
@@ -16,6 +16,8 @@ export const updateBasicInfoSchema = z.object({
   activity_level: z.enum(["sedentary", "light", "moderate", "active", "very_active"], { message: "Mức độ vận động không hợp lệ" }),
   goal: z.enum(["lose_weight", "maintain", "gain_weight"], { message: "Mục tiêu không hợp lệ" }),
 });
+
+export type UpdateBasicInfoDTO = z.infer<typeof updateBasicInfoSchema>;
 
 export const listUsersQuerySchema = z.object({
   search: z.string().trim().max(100).optional().default(""),

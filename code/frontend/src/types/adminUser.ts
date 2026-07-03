@@ -24,7 +24,6 @@ export type Goal = "lose_weight" | "maintain" | "gain_weight";export type Admin
   email: string;
   password: string;
   username: string;
-  role: UserRole;
 };export type AdminUserListResponse = {
     items: AdminUserListItem[];
     total: number;

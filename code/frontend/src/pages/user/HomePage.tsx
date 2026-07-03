@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Calendar from "../../components/home/Calendar";
-import DailyFuel from "../../components/home/DailyFuel";
-import MealJourney from "../../components/home/MealJourney";
+import DailyStats from "../../components/home/DailyStats";
+import DayMeals from "../../components/home/DayMeals";
 import MyDishesSection from "../../components/home/MyDishesSection";
 import MealEditModal from "../../components/home/MealEditModal";
 import CreateMealModal from "../../components/home/CreateMealModal";
@@ -9,13 +9,7 @@ import TrackNutrientsModal from "../../components/home/TrackNutrientsModal";
 import { dailyPlanService } from "../../services/dailyPlan.service";
 import { authService } from "../../services/auth.service";
 import type { DailyPlanResponse, MealType } from "../../types/dailyPlan";
-
-function todayStr(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
+import { todayStr } from "../../utils/format.util";
 
 function optimisticToggle(
   plan: DailyPlanResponse,
@@ -55,7 +49,7 @@ export default function HomePage() {
   useEffect(() => {
     authService
       .me()
-      .then((res) => setTdee(res.data.metrics?.tdee ?? null))
+      .then((res) => setTdee(res.data.user.TDEE))
       .catch(() => setTdee(null));
   }, []);
 
@@ -109,7 +103,7 @@ export default function HomePage() {
   return (
     <div className="space-y-8">
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <DailyFuel
+        <DailyStats
           summary={plan?.summary ?? null}
           trackedNutrients={plan?.trackedNutrients ?? []}
           tdee={tdee}
@@ -124,7 +118,7 @@ export default function HomePage() {
         />
       </section>
 
-      <MealJourney
+      <DayMeals
         meals={plan?.meals ?? []}
         loading={loading}
         onToggleFinish={handleToggleFinish}

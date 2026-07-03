@@ -10,7 +10,7 @@ router.use(protect);
 router.get("/public", suggestPlanController.listPublic);
 router.get("/public/meals/:mealId/nutrients", suggestPlanController.getPublicMealNutrients);
 router.get("/public/:id", suggestPlanController.getPublicById);
-router.post("/public/:id/apply", suggestPlanController.applyPublic);
+router.post("/public/:id/apply", suggestPlanController.applySuggestPlan);
 
 router.use(authorize("admin"));
 

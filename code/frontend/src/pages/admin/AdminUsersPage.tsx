@@ -17,12 +17,9 @@ import UserDetail from "../../components/admin/UserDetail";
 import { adminUserService } from "../../services/adminUser.service";
 import type { AdminUserListItem } from "../../types/adminUser";
 import { useAuth } from "../../contexts/AuthContext";
+import { formatDate } from "../../utils/format.util";
 
 const PAGE_SIZE = 20;
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("vi-VN");
-}
 
 function roleLabel(role: AdminUserListItem["role"]) {
   return role === "admin" ? "Admin" : "User";

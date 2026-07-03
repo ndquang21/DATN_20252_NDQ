@@ -6,6 +6,7 @@ import type { MyDishItem } from "../../types/dish";
 import type { NutrientItem } from "../../types/nutrient";
 import { isDefaultDishImage } from "../../constants/default-images";
 import Select from "../ui/Select";
+import { parseApiError } from "../../utils/error.util";
 
 type Props = {
   onClose: () => void;
@@ -35,24 +36,6 @@ type ExtraNutrientRow = {
   unit: string;
   value: string;
 };
-
-function parseApiError(err: unknown, fallback: string): string {
-  if (
-    err &&
-    typeof err === "object" &&
-    "response" in err &&
-    err.response &&
-    typeof err.response === "object" &&
-    "data" in err.response &&
-    err.response.data &&
-    typeof err.response.data === "object" &&
-    "error" in err.response.data &&
-    typeof err.response.data.error === "string"
-  ) {
-    return err.response.data.error;
-  }
-  return fallback;
-}
 
 export default function CreateDishModal({ onClose, dishId, onSaved }: Props) {
   const isEdit = dishId != null;

@@ -3,6 +3,7 @@ import { Loader2, X } from "lucide-react";
 import type { NutrientItem, NutrientUnit } from "../../types/nutrient";
 import { ADMIN_NUTRIENT_UNITS } from "../../types/nutrient";
 import Select from "../ui/Select";
+import { parseApiError } from "../../utils/error.util";
 
 type Props = {
   nutrient?: NutrientItem | null;
@@ -10,24 +11,6 @@ type Props = {
   onSaved: () => void;
   onSubmit: (payload: { name: string; unit: NutrientUnit }) => Promise<void>;
 };
-
-function parseApiError(err: unknown, fallback: string): string {
-  if (
-    err &&
-    typeof err === "object" &&
-    "response" in err &&
-    err.response &&
-    typeof err.response === "object" &&
-    "data" in err.response &&
-    err.response.data &&
-    typeof err.response.data === "object" &&
-    "error" in err.response.data &&
-    typeof err.response.data.error === "string"
-  ) {
-    return err.response.data.error;
-  }
-  return fallback;
-}
 
 export default function NutrientFormModal({
   nutrient,

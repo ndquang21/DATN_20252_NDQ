@@ -3,37 +3,13 @@ import { userRepository } from "../user/user.repository";
 import { MealType } from "../../../prisma/generated/prisma/client";
 import {
   DailyPlanResponseDTO,
-  DishItemDTO,
-  MealItemDTO,
   MealNutrientsDTO,
-  NutrientTotalsDTO,
   NutrientValueDTO,
   TrackedNutrientDayDTO,
 } from "./daily-plan.dto";
-import { DEFAULT_DISH_IMAGE_URL } from "../../constants/default-images";
 import { suggestPlanService } from "../suggest-plan/suggest-plan.service";
-import { NUTRIENT_NAMES } from "../../constants/nutrient-names";
-
-const MEAL_ORDER: Record<string, number> = {
-  breakfast: 0,
-  lunch: 1,
-  dinner: 2,
-  snack: 3,
-};
-
-const DEFAULT_DISH_IMAGE = DEFAULT_DISH_IMAGE_URL;
-const N_CAL = NUTRIENT_NAMES.CALORIES;
-const N_PRO = NUTRIENT_NAMES.PROTEIN;
-const N_CARB = NUTRIENT_NAMES.CARBOHYDRATE;
-const N_FAT = NUTRIENT_NAMES.FAT;
-
-function parseDateOnly(dateStr: string): Date {
-  return new Date(`${dateStr}T00:00:00.000Z`);
-}
-
-function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+import { parseDateOnly, formatDateOnly } from "../../utils/date.util";
+import { round2, buildMealsAndSummary } from "../../utils/meal.util";
 
 type MealContext = {
   daily_plan_id: number;
@@ -52,90 +28,17 @@ async function revalidateSuggestPlanIfTemplate(dailyPlanId: number) {
   }
 }
 
-function mapPlanRecordToResponse(
+function toDailyPlanResponse(
   plan: NonNullable<
     Awaited<ReturnType<typeof dailyPlanRepository.findByIdWithMeals>>
   >,
 ): DailyPlanResponseDTO {
-  const dateStr = toDateStr(plan.daily_plan_date);
-
-  const meals: MealItemDTO[] = plan.daily_menus
-    .map((dm) => {
-      const meal = dm.meal;
-
-      let mCal = 0;
-      let mPro = 0;
-      let mCarb = 0;
-      let mFat = 0;
-
-      const dishes: DishItemDTO[] = meal.meal_menus.map((mm) => {
-        const valueByName = new Map(
-          mm.dish.dish_nutrients.map((dn) => [dn.nutrient.name, dn.value]),
-        );
-        const q = mm.quantity;
-        const cal = (valueByName.get(N_CAL) ?? 0) * q;
-
-        mCal += cal;
-        mPro += (valueByName.get(N_PRO) ?? 0) * q;
-        mCarb += (valueByName.get(N_CARB) ?? 0) * q;
-        mFat += (valueByName.get(N_FAT) ?? 0) * q;
-
-        return {
-          dishId: mm.dish.dish_id,
-          name: mm.dish.dish_name,
-          imageUrl: mm.dish.image_url,
-          quantity: q,
-          grams: Math.round(q * 100),
-          calories: Math.round(cal),
-        };
-      });
-
-      return {
-        mealId: meal.meal_id,
-        type: meal.meal_type,
-        isFinished: meal.is_finished,
-        calories: round1(mCal),
-        protein: round1(mPro),
-        carb: round1(mCarb),
-        fat: round1(mFat),
-        coverImageUrl: pickCoverImage(dishes),
-        dishes,
-      };
-    })
-    .sort((a, b) => (MEAL_ORDER[a.type] ?? 99) - (MEAL_ORDER[b.type] ?? 99));
-
-  const total = emptyTotals();
-  const completed = emptyTotals();
-  for (const meal of meals) {
-    total.calories += meal.calories;
-    total.protein += meal.protein;
-    total.carb += meal.carb;
-    total.fat += meal.fat;
-    if (meal.isFinished) {
-      completed.calories += meal.calories;
-      completed.protein += meal.protein;
-      completed.carb += meal.carb;
-      completed.fat += meal.fat;
-    }
-  }
+  const { meals, summary } = buildMealsAndSummary(plan.daily_menus);
 
   return {
-    date: dateStr,
+    date: formatDateOnly(plan.daily_plan_date),
     hasPlan: true,
-    summary: {
-      total: {
-        calories: round1(total.calories),
-        protein: round1(total.protein),
-        carb: round1(total.carb),
-        fat: round1(total.fat),
-      },
-      completed: {
-        calories: round1(completed.calories),
-        protein: round1(completed.protein),
-        carb: round1(completed.carb),
-        fat: round1(completed.fat),
-      },
-    },
+    summary,
     meals,
     trackedNutrients: [],
   };
@@ -149,19 +52,19 @@ async function reloadPlanAfterMealEdit(
     const plan = await dailyPlanRepository.findByIdWithMeals(ctx.daily_plan_id);
     if (!plan) {
       return {
-        date: toDateStr(ctx.daily_plan.daily_plan_date),
+        date: formatDateOnly(ctx.daily_plan.daily_plan_date),
         hasPlan: false,
         summary: null,
         meals: [],
         trackedNutrients: [],
       };
     }
-    return mapPlanRecordToResponse(plan);
+    return toDailyPlanResponse(plan);
   }
 
   return dailyPlanService.getDailyPlan(
     userId,
-    toDateStr(ctx.daily_plan.daily_plan_date),
+    formatDateOnly(ctx.daily_plan.daily_plan_date),
   );
 }
 
@@ -182,31 +85,6 @@ type CreateMealResult =
       ok: false;
       reason: "dish_not_found" | "meal_type_exists" | "forbidden";
     };
-
-function pickCoverImage(dishes: DishItemDTO[]): string {
-  if (dishes.length === 0) return DEFAULT_DISH_IMAGE;
-  const nonDefault = dishes.filter(
-    (d) => d.imageUrl && !d.imageUrl.includes("default_dish"),
-  );
-  const pool = nonDefault.length > 0 ? nonDefault : dishes;
-  const cover = pool.reduce(
-    (best, d) => (d.calories > best.calories ? d : best),
-    pool[0],
-  );
-  return cover.imageUrl ?? DEFAULT_DISH_IMAGE;
-}
-
-function emptyTotals(): NutrientTotalsDTO {
-  return { calories: 0, protein: 0, carb: 0, fat: 0 };
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
 
 type RawDayPlan = NonNullable<
   Awaited<ReturnType<typeof dailyPlanRepository.findByUserAndDate>>
@@ -267,83 +145,12 @@ export const dailyPlanService = {
       };
     }
 
-    const meals: MealItemDTO[] = plan.daily_menus
-      .map((dm) => {
-        const meal = dm.meal;
-
-        let mCal = 0;
-        let mPro = 0;
-        let mCarb = 0;
-        let mFat = 0;
-
-        const dishes: DishItemDTO[] = meal.meal_menus.map((mm) => {
-          const valueByName = new Map(
-            mm.dish.dish_nutrients.map((dn) => [dn.nutrient.name, dn.value]),
-          );
-          const q = mm.quantity;
-          const cal = (valueByName.get(N_CAL) ?? 0) * q;
-
-          mCal += cal;
-          mPro += (valueByName.get(N_PRO) ?? 0) * q;
-          mCarb += (valueByName.get(N_CARB) ?? 0) * q;
-          mFat += (valueByName.get(N_FAT) ?? 0) * q;
-
-          return {
-            dishId: mm.dish.dish_id,
-            name: mm.dish.dish_name,
-            imageUrl: mm.dish.image_url,
-            quantity: q,
-            grams: Math.round(q * 100),
-            calories: Math.round(cal),
-          };
-        });
-
-        return {
-          mealId: meal.meal_id,
-          type: meal.meal_type,
-          isFinished: meal.is_finished,
-          calories: round1(mCal),
-          protein: round1(mPro),
-          carb: round1(mCarb),
-          fat: round1(mFat),
-          coverImageUrl: pickCoverImage(dishes),
-          dishes,
-        };
-      })
-      .sort((a, b) => (MEAL_ORDER[a.type] ?? 99) - (MEAL_ORDER[b.type] ?? 99));
-
-    const total = emptyTotals();
-    const completed = emptyTotals();
-    for (const meal of meals) {
-      total.calories += meal.calories;
-      total.protein += meal.protein;
-      total.carb += meal.carb;
-      total.fat += meal.fat;
-      if (meal.isFinished) {
-        completed.calories += meal.calories;
-        completed.protein += meal.protein;
-        completed.carb += meal.carb;
-        completed.fat += meal.fat;
-      }
-    }
+    const { meals, summary } = buildMealsAndSummary(plan.daily_menus);
 
     return {
       date: dateStr,
       hasPlan: true,
-      summary: {
-        total: {
-          calories: round1(total.calories),
-          protein: round1(total.protein),
-          carb: round1(total.carb),
-          fat: round1(total.fat),
-        },
-        completed: {
-          calories: round1(completed.calories),
-          protein: round1(completed.protein),
-          carb: round1(completed.carb),
-          fat: round1(completed.fat),
-        },
-      },
+      summary,
       meals,
       trackedNutrients,
     };
@@ -529,9 +336,9 @@ export const dailyPlanService = {
         plan.daily_plan_id,
       );
       const result = loaded
-        ? mapPlanRecordToResponse(loaded)
+        ? toDailyPlanResponse(loaded)
         : {
-            date: toDateStr(plan.daily_plan_date),
+            date: formatDateOnly(plan.daily_plan_date),
             hasPlan: false,
             summary: null,
             meals: [],

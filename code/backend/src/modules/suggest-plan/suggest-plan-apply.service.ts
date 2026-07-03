@@ -5,6 +5,7 @@ import { dailyPlanService } from "../daily-plan/daily-plan.service";
 import { userRepository } from "../user/user.repository";
 import { userService } from "../user/user.service";
 import { suggestPlanRepository } from "./suggest-plan.repository";
+import { parseDateOnly, formatDateOnly } from "../../utils/date.util";
 import type {
   ApplySuggestPlanBodyDTO,
   ApplySuggestPlanResponseDTO,
@@ -23,14 +24,6 @@ type ApplyResult =
       reason: "not_found" | "profile_incomplete" | "invalid_day" | "invalid_meal";
     };
 
-function parseDateOnly(dateStr: string): Date {
-  return new Date(`${dateStr}T00:00:00.000Z`);
-}
-
-function formatDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 function addDays(dateStr: string, offset: number): string {
   const d = parseDateOnly(dateStr);
   d.setUTCDate(d.getUTCDate() + offset);
@@ -45,7 +38,7 @@ function scaleGrams(originalGrams: number, factor: number): number {
 
 function quantityFromGrams(grams: number): number {
   const g = Math.round(grams);
-  return Math.round(g * 100) / 10000;
+  return g / 100;
 }
 
 function readGramsFromQuantity(quantity: number): number {
@@ -86,7 +79,7 @@ async function resolveUserTdee(userId: number): Promise<number | null> {
   const user = await userRepository.findById(userId);
   if (!user) return null;
   if (user.TDEE != null && user.TDEE > 0) return user.TDEE;
-  const metrics = userService.calculateMetrics(user);
+  const metrics = userService.calculateTdee(user);
   return metrics?.tdee ?? null;
 }
 
@@ -193,7 +186,7 @@ function findTemplateMeal(
 }
 
 export const suggestPlanApplyService = {
-  async applyPublic(
+  async apply(
     userId: number,
     suggestPlanId: number,
     body: ApplySuggestPlanBodyDTO,

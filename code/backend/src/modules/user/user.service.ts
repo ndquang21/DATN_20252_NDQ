@@ -1,29 +1,36 @@
 import { userRepository } from "./user.repository";
 import type {
+  ChangePasswordDTO,
   CreateUserDTO,
   TrackedNutrientsResponseDTO,
   UpdateTrackedNutrientsBodyDTO,
 } from "./user.dto";
-import { Prisma } from "../../../prisma/generated/prisma/client";
+import type { UpdateBasicInfoDTO } from "./user.validation";
+import type { User } from "../../../prisma/generated/prisma/client";
 import bcrypt from "bcrypt";
 
+// Các field hồ sơ cơ thể cần để tính TDEE.
+type TdeeInput = Pick<
+  User,
+  "dob" | "height" | "weight" | "gender" | "activity_level" | "goal"
+>;
 
 export const userService = {
   async listForAdmin(search: string, page: number, pageSize: number) {
     const skip = (page - 1) * pageSize;
     const [items, total] = await Promise.all([
-      userRepository.findForAdmin(search, skip, pageSize),
+      userRepository.listForAdmin(search, skip, pageSize),
       userRepository.countForAdmin(search),
     ]);
     return { items, total, page, pageSize };
   },
 
-  async getUserByIdForAdmin(user_id: number) {
-    return userRepository.findByIdForAdmin(user_id);
+  async getUserByIdForAdmin(userId: number) {
+    return userRepository.findByIdForAdmin(userId);
   },
 
-  async getUserById(user_id: number) {
-    return userRepository.findById(user_id);
+  async getUserById(userId: number) {
+    return userRepository.findById(userId);
   },
 
   async createUser(data: CreateUserDTO) {
@@ -40,16 +47,11 @@ export const userService = {
     });
   },
 
-  async deleteUser(user_id: number) {
-    return userRepository.delete(user_id);
+  async remove(userId: number) {
+    return userRepository.delete(userId);
   },
 
-  async updateUser(user_id: number, data: Prisma.UserUpdateInput) {
-    return userRepository.update(user_id, data);
-  },
-
-
-  calculateMetrics(user: any) {
+  calculateTdee(user: TdeeInput) {
     if (!user.dob || !user.height || !user.weight || !user.gender || !user.activity_level || !user.goal) {
       return null;
     }
@@ -77,61 +79,59 @@ export const userService = {
   },
 
 
-  async updateBasicInfo(user_id: number, data: any) {
-    const updatedUser = await userRepository.update(user_id, {
+  async updateBasicInfo(userId: number, data: UpdateBasicInfoDTO) {
+    const dob = new Date(data.dob);
+
+    // Tính TDEE
+    const metrics = this.calculateTdee({ ...data, dob });
+
+    const updatedUser = await userRepository.update(userId, {
       gender: data.gender,
-      dob: data.dob ? new Date(data.dob) : undefined,
+      dob,
       height: data.height,
       weight: data.weight,
       activity_level: data.activity_level,
-      goal: data.goal
+      goal: data.goal,
+      TDEE: metrics ? metrics.tdee : null,
     });
-
-    const metrics = this.calculateMetrics(updatedUser);
-    if (metrics) {
-      await userRepository.update(user_id, { TDEE: metrics.tdee });
-    }
 
     return {
       user: updatedUser,
-      metrics
     };
   },
 
-  async getMyBasicInfo(user_id: number) {
-    const user = await userRepository.findById(user_id);
+  async getMyProfile(userId: number) {
+    const user = await userRepository.findById(userId);
     if (!user) throw new Error("User not found");
 
-    const metrics = this.calculateMetrics(user);
-    
+    // TDEE đã được lưu sẵn trên user (cập nhật khi updateBasicInfo) → trả thẳng, không tính lại.
     return {
       user,
-      metrics
     };
   },
 
-  async changePassword(user_id: number, data: any) {
-    const user = await userRepository.findByIdWithPassword(user_id);
+  async changePassword(userId: number, data: ChangePasswordDTO) {
+    const user = await userRepository.findByIdWithPassword(userId);
     if (!user) throw new Error("User not found");
 
     const isMatch = await bcrypt.compare(data.current_password, user.password);
     if (!isMatch) throw new Error("Mật khẩu hiện tại không chính xác");
 
     const hashedPassword = await bcrypt.hash(data.new_password, 10);
-    return userRepository.update(user_id, { password: hashedPassword });
+    return userRepository.update(userId, { password: hashedPassword });
   },
 
-  async updateAvatar(user_id: number, avatar_url: string) {
-    const user = await userRepository.findById(user_id);
+  async updateAvatar(userId: number, avatar_url: string) {
+    const user = await userRepository.findById(userId);
     if (!user) throw new Error("User not found");
 
-    return userRepository.update(user_id, { avatar_url });
+    return userRepository.update(userId, { avatar_url });
   },
 
   async getTrackedNutrients(
-    user_id: number,
+    userId: number,
   ): Promise<TrackedNutrientsResponseDTO> {
-    const rows = await userRepository.findTrackedNutrients(user_id);
+    const rows = await userRepository.findTrackedNutrients(userId);
     return {
       slots: rows.map((r) => ({
         sortOrder: r.sort_order,
@@ -143,7 +143,7 @@ export const userService = {
   },
 
   async updateTrackedNutrients(
-    user_id: number,
+    userId: number,
     body: UpdateTrackedNutrientsBodyDTO,
   ): Promise<TrackedNutrientsResponseDTO> {
     const ids = body.slots.map((s) => s.nutrientId);
@@ -157,7 +157,7 @@ export const userService = {
       throw new Error("Không thể theo dõi chất macro hệ thống");
     }
 
-    await userRepository.replaceTrackedNutrients(user_id, body.slots);
-    return this.getTrackedNutrients(user_id);
+    await userRepository.replaceTrackedNutrients(userId, body.slots);
+    return this.getTrackedNutrients(userId);
   },
 };

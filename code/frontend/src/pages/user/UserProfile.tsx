@@ -18,10 +18,11 @@ import {
   type UpdateBasicInfoPayload,
 } from "../../services/user.service";
 import { DEFAULT_AVATAR_URL } from "../../constants/default-images";
+import { parseApiError } from "../../utils/error.util";
 
 type UserHealthInfo = UpdateBasicInfoPayload;
 
-export default function BasicInfo() {
+export default function UserProfile() {
   const { user, setUser } = useAuth();
 
   const [profile, setProfile] = useState<UserHealthInfo>({
@@ -106,12 +107,10 @@ export default function BasicInfo() {
 
       setMetricsSuccess("Cập nhật ảnh đại diện thành công!");
       setTimeout(() => setMetricsSuccess(null), 3000);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Lỗi upload avatar:", error);
       setMetricsError(
-        error.response?.data?.error ||
-          error.response?.data?.message ||
-          "Không thể tải ảnh lên. Vui lòng thử lại.",
+        parseApiError(error, "Không thể tải ảnh lên. Vui lòng thử lại."),
       );
     } finally {
       setUploadingAvatar(false);
@@ -173,10 +172,10 @@ export default function BasicInfo() {
         confirm_password: "",
       });
       setTimeout(() => setPasswordSuccess(null), 3000);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Lỗi đổi mật khẩu", error);
       setPasswordError(
-        error.response?.data?.error || "Có lỗi xảy ra khi đổi mật khẩu.",
+        parseApiError(error, "Có lỗi xảy ra khi đổi mật khẩu."),
       );
     } finally {
       setSavingPassword(false);

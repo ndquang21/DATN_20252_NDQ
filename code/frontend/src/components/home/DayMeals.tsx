@@ -3,7 +3,7 @@ import type { MealItem, MealType } from "../../types/dailyPlan";
 import MealCard from "./MealCard";
 import { MEAL_META } from "./mealMeta";
 
-type MealJourneyProps = {
+type DayMealsProps = {
   meals: MealItem[];
   loading: boolean;
   onToggleFinish: (mealId: number, isFinished: boolean) => void;
@@ -13,13 +13,13 @@ type MealJourneyProps = {
 
 const FIXED_ORDER: MealType[] = ["breakfast", "lunch", "dinner"];
 
-export default function MealJourney({
+export default function DayMeals({
   meals,
   loading,
   onToggleFinish,
   onOpenDetail,
   onAddMeal,
-}: MealJourneyProps) {
+}: DayMealsProps) {
   const snacks = meals.filter((m) => m.type === "snack");
 
   return (

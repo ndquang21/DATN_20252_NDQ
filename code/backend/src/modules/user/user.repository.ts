@@ -2,7 +2,7 @@ import { prisma } from "../../config/prisma";
 import { Prisma } from "../../../prisma/generated/prisma/client";
 import { CreateUserDTO } from "./user.dto";
 
-const adminListSelect = {
+const adminUserListSelect = {
   user_id: true,
   email: true,
   username: true,
@@ -71,10 +71,10 @@ export const userRepository = {
     return prisma.user.findUnique({ where: { email } });
   },
 
-  findForAdmin(search: string, skip: number, take: number) {
+  listForAdmin(search: string, skip: number, take: number) {
     return prisma.user.findMany({
       where: buildAdminListWhere(search),
-      select: adminListSelect,
+      select: adminUserListSelect,
       orderBy: { created_at: "desc" },
       skip,
       take,
