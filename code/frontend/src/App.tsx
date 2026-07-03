@@ -5,7 +5,7 @@ import LandingPage from "./pages/LandingPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 import HomePage from "./pages/user/HomePage";
-import BasicInfo from "./pages/user/UserProfile";
+import UserProfile from "./pages/user/UserProfile";
 import UserSuggestPlansPage from "./pages/user/UserSuggestPlansPage";
 import UserSuggestPlanDetailPage from "./pages/user/UserSuggestPlanDetailPage";
 
@@ -67,7 +67,7 @@ function AppRoutes() {
         }
       >
         <Route path="/home" element={<HomePage />} />
-        <Route path="/basic-info" element={<BasicInfo />} />
+        <Route path="/basic-info" element={<UserProfile />} />
         <Route path="/suggest-plans" element={<UserSuggestPlansPage />} />
         <Route path="/suggest-plans/:id" element={<UserSuggestPlanDetailPage />} />
       </Route>

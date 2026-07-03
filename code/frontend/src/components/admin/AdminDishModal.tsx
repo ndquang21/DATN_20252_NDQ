@@ -5,30 +5,13 @@ import { adminDishService } from "../../services/adminDish.service";
 import type { NutrientItem } from "../../types/nutrient";
 import { isDefaultDishImage } from "../../constants/default-images";
 import { isRequiredMacro } from "../../constants/nutrient-names";
+import { parseApiError } from "../../utils/error.util";
 
 type Props = {
   dishId?: number;
   onClose: () => void;
   onSaved: () => void;
 };
-
-function parseApiError(err: unknown, fallback: string): string {
-  if (
-    err &&
-    typeof err === "object" &&
-    "response" in err &&
-    err.response &&
-    typeof err.response === "object" &&
-    "data" in err.response &&
-    err.response.data &&
-    typeof err.response.data === "object" &&
-    "error" in err.response.data &&
-    typeof err.response.data.error === "string"
-  ) {
-    return err.response.data.error;
-  }
-  return fallback;
-}
 
 function parseNum(v: string): number | null {
   if (v.trim() === "") return 0;

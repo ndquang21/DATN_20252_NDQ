@@ -39,6 +39,37 @@ const parseDurationToMs = (value: string, fallbackMs: number) => {
   }
 };
 
+// Tạo access token + refresh token cho một user, lưu refresh token vào DB.
+// Dùng chung cho cả register và login.
+const issueAuthTokens = async (userId: number, role: string) => {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error("JWT_SECRET is not set");
+
+  const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
+  if (!refreshSecret) throw new Error("REFRESH_TOKEN_SECRET is not set");
+
+  const payload = { userId, role };
+
+  const token = jwt.sign(payload, jwtSecret, {
+    expiresIn: (process.env.JWT_EXPIRES_IN ||
+      "1d") as jwt.SignOptions["expiresIn"],
+  });
+
+  const refreshExpiresIn = process.env.REFRESH_TOKEN_EXPIRES_IN || "7d";
+  const refreshToken = jwt.sign(payload, refreshSecret, {
+    expiresIn: refreshExpiresIn as jwt.SignOptions["expiresIn"],
+  });
+
+  const refreshTtlMs = parseDurationToMs(
+    refreshExpiresIn,
+    7 * 24 * 60 * 60 * 1000,
+  );
+  const refreshExpiresAt = new Date(Date.now() + refreshTtlMs);
+  await saveRefreshToken(userId, refreshToken, refreshExpiresAt);
+
+  return { token, refreshToken };
+};
+
 export const authService = {
   async register(dto: RegisterDTO) {
     const existingUser = await userRepository.findByEmail(dto.email);
@@ -57,34 +88,10 @@ export const authService = {
       role: "user",
     });
 
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      throw new Error("JWT_SECRET is not set");
-    }
-
-    const payload = { userId: newUser.user_id, role: newUser.role };
-    const token = jwt.sign(payload, jwtSecret, {
-      expiresIn: (process.env.JWT_EXPIRES_IN ||
-        "1d") as jwt.SignOptions["expiresIn"],
-    });
-
-    const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (!refreshSecret) throw new Error("REFRESH_TOKEN_SECRET is not set");
-
-    const refreshExpiresIn = (process.env.REFRESH_TOKEN_EXPIRES_IN ||
-      "7d") as jwt.SignOptions["expiresIn"];
-
-    const refreshToken = jwt.sign(payload, refreshSecret, {
-      expiresIn: refreshExpiresIn,
-    });
-
-    const refreshTtlMs = parseDurationToMs(
-      process.env.REFRESH_TOKEN_EXPIRES_IN || "7d",
-      7 * 24 * 60 * 60 * 1000,
+    const { token, refreshToken } = await issueAuthTokens(
+      newUser.user_id,
+      newUser.role,
     );
-
-    const refreshExpiresAt = new Date(Date.now() + refreshTtlMs);
-    await saveRefreshToken(newUser.user_id, refreshToken, refreshExpiresAt);
 
     return {
       token,
@@ -114,34 +121,10 @@ export const authService = {
       throw error;
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      throw new Error("JWT_SECRET is not set");
-    }
-
-    const payload = { userId: user.user_id, role: user.role };
-    const token = jwt.sign(payload, jwtSecret, {
-      expiresIn: (process.env.JWT_EXPIRES_IN ||
-        "1d") as jwt.SignOptions["expiresIn"],
-    });
-
-    const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (!refreshSecret) throw new Error("REFRESH_TOKEN_SECRET is not set");
-
-    const refreshExpiresIn = (process.env.REFRESH_TOKEN_EXPIRES_IN ||
-      "7d") as jwt.SignOptions["expiresIn"];
-
-    const refreshToken = jwt.sign(payload, refreshSecret, {
-      expiresIn: refreshExpiresIn,
-    });
-
-    const refreshTtlMs = parseDurationToMs(
-      process.env.REFRESH_TOKEN_EXPIRES_IN || "7d",
-      7 * 24 * 60 * 60 * 1000,
+    const { token, refreshToken } = await issueAuthTokens(
+      user.user_id,
+      user.role,
     );
-
-    const refreshExpiresAt = new Date(Date.now() + refreshTtlMs);
-    await saveRefreshToken(user.user_id, refreshToken, refreshExpiresAt);
 
     return {
       token,

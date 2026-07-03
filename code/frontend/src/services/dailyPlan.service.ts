@@ -2,7 +2,6 @@ import { api } from "./api";
 import type {
   DailyPlanResponse,
   MealNutrients,
-  MealType,
   CreateMealResponse,
   CreateMealInput,
 } from "../types/dailyPlan";

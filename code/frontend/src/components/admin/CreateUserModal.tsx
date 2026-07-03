@@ -1,37 +1,17 @@
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { adminUserService } from "../../services/adminUser.service";
-import type { UserRole } from "../../types/adminUser";
-import Select from "../../components/ui/Select";
+import { parseApiError } from "../../utils/error.util";
 
 type Props = {
   onClose: () => void;
   onCreated: () => void;
 };
 
-function parseApiError(err: unknown, fallback: string): string {
-  if (
-    err &&
-    typeof err === "object" &&
-    "response" in err &&
-    err.response &&
-    typeof err.response === "object" &&
-    "data" in err.response &&
-    err.response.data &&
-    typeof err.response.data === "object" &&
-    "error" in err.response.data &&
-    typeof err.response.data.error === "string"
-  ) {
-    return err.response.data.error;
-  }
-  return fallback;
-}
-
 export default function CreateUserModal({ onClose, onCreated }: Props) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("user");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +41,6 @@ export default function CreateUserModal({ onClose, onCreated }: Props) {
         email: trimmedEmail,
         username: trimmedUsername,
         password,
-        role,
       });
       onCreated();
       onClose();
@@ -136,21 +115,6 @@ export default function CreateUserModal({ onClose, onCreated }: Props) {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Ít nhất 6 ký tự"
               className="w-full px-3 py-2 text-sm rounded-xl border border-outline-variant focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            />
-          </label>
-
-          <label className="block space-y-1.5">
-            <span className="text-sm font-semibold text-on-surface">
-              Vai trò
-            </span>
-            <Select
-              value={role}
-              onChange={setRole}
-              options={[
-                { value: "user", label: "User" },
-                { value: "admin", label: "Admin" },
-              ]}
-              className="w-full"
             />
           </label>
 

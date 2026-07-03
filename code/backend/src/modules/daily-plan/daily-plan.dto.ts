@@ -29,7 +29,6 @@ export type NutrientTotalsDTO = {
 };
 
 export type DailyPlanSummaryDTO = {
-  total: NutrientTotalsDTO; // tổng kế hoạch của ngày
   completed: NutrientTotalsDTO; // phần đã tick hoàn thành
 };
 

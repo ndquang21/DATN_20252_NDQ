@@ -1,12 +1,13 @@
 import { prisma } from "../../config/prisma";
 import { Prisma } from "../../../prisma/generated/prisma/client";
 import { DAILY_PLAN_NUTRIENT_NAMES } from "../../constants/nutrient-names";
+import { MAX_SUGGEST_PLAN_DAYS } from "../../constants/suggest-plan";
 
 const MACRO_NUTRIENT_NAMES = [...DAILY_PLAN_NUTRIENT_NAMES];
-export const MAX_SUGGEST_PLAN_DAYS = 14;
 const DEFAULT_PLAN_NAME = "Thực đơn mới";
 
-function templatePlanDate(suggestPlanId: number, dayIndex: number): Date {
+// Template dùng lại bảng daily_plan (bắt buộc có ngày) → gán ngày giả xa (2099) để không đụng lịch thật của user.
+function makeTemplatePlanDate(suggestPlanId: number, dayIndex: number): Date {
   const offset = suggestPlanId * 20 + dayIndex;
   const d = new Date("2099-01-01T00:00:00.000Z");
   d.setUTCDate(d.getUTCDate() + offset);
@@ -41,7 +42,7 @@ const dailyPlanMealsInclude = {
   },
 } as const;
 
-const listDaysInclude = {
+const planDaysForListInclude = {
   suggest_plan_days: {
     orderBy: { day_index: "asc" as const },
     include: {
@@ -121,7 +122,7 @@ function buildListOrderBy(
 }
 
 export const suggestPlanRepository = {
-  findManyForList(
+  listForAdmin(
     search: string,
     skip: number,
     take: number,
@@ -129,18 +130,18 @@ export const suggestPlanRepository = {
   ) {
     return prisma.suggestPlan.findMany({
       where: buildListWhere(search),
-      include: listDaysInclude,
+      include: planDaysForListInclude,
       orderBy: buildListOrderBy(sort),
       skip,
       take,
     });
   },
 
-  countForList(search: string) {
+  countForAdmin(search: string) {
     return prisma.suggestPlan.count({ where: buildListWhere(search) });
   },
 
-  findManyPublicForList(
+  listPublic(
     search: string,
     skip: number,
     take: number,
@@ -161,7 +162,7 @@ export const suggestPlanRepository = {
     });
   },
 
-  countPublicForList(search: string) {
+  countPublic(search: string) {
     return prisma.suggestPlan.count({ where: buildPublicListWhere(search) });
   },
 
@@ -243,7 +244,7 @@ export const suggestPlanRepository = {
         const dailyPlan = await tx.dailyPlan.create({
           data: {
             user_id: adminUserId,
-            daily_plan_date: templatePlanDate(plan.suggest_plan_id, dayIndex),
+            daily_plan_date: makeTemplatePlanDate(plan.suggest_plan_id, dayIndex),
             is_template: true,
           },
           select: { daily_plan_id: true },
@@ -312,7 +313,7 @@ export const suggestPlanRepository = {
       const dailyPlan = await tx.dailyPlan.create({
         data: {
           user_id: adminUserId,
-          daily_plan_date: templatePlanDate(suggestPlanId, dayIndex),
+          daily_plan_date: makeTemplatePlanDate(suggestPlanId, dayIndex),
           is_template: true,
         },
         select: { daily_plan_id: true },

@@ -7,7 +7,7 @@ import {
 
 const MACRO_NAMES = [...LOCKED_MACRO_NAMES];
 
-const mineDishSelect = {
+const dishSummarySelect = {
   dish_id: true,
   dish_name: true,
   image_url: true,
@@ -43,7 +43,7 @@ const dishDetailSelect = {
   },
 } satisfies Prisma.DishSelect;
 
-function buildGlobalWhere(search: string): Prisma.DishWhereInput {
+function buildGlobalDishWhere(search: string): Prisma.DishWhereInput {
   const where: Prisma.DishWhereInput = { is_global: true };
   if (search) {
     where.dish_name = { contains: search, mode: "insensitive" };
@@ -95,7 +95,7 @@ async function cleanupMealsAfterDishDelete(
   }
 }
 
-function buildWhere(userId: number, search: string): Prisma.DishWhereInput {
+function buildAccessibleDishWhere(userId: number, search: string): Prisma.DishWhereInput {
   const where: Prisma.DishWhereInput = {
     OR: [{ is_global: true }, { created_by: userId }],
   };
@@ -113,9 +113,9 @@ function pickMacroValue(
 }
 
 export const dishRepository = {
-  search(userId: number, search: string, skip: number, take: number) {
+  searchDishes(userId: number, search: string, skip: number, take: number) {
     return prisma.dish.findMany({
-      where: buildWhere(userId, search),
+      where: buildAccessibleDishWhere(userId, search),
       select: {
         dish_id: true,
         dish_name: true,
@@ -131,27 +131,27 @@ export const dishRepository = {
     });
   },
 
-  count(userId: number, search: string) {
-    return prisma.dish.count({ where: buildWhere(userId, search) });
+  countDishes(userId: number, search: string) {
+    return prisma.dish.count({ where: buildAccessibleDishWhere(userId, search) });
   },
 
-  findMine(userId: number, skip: number, take: number) {
+  listMyDishes(userId: number, skip: number, take: number) {
     return prisma.dish.findMany({
       where: { created_by: userId, is_global: false },
-      select: mineDishSelect,
+      select: dishSummarySelect,
       orderBy: { created_at: "desc" },
       skip,
       take,
     });
   },
 
-  countMine(userId: number) {
+  countMyDishes(userId: number) {
     return prisma.dish.count({
       where: { created_by: userId, is_global: false },
     });
   },
 
-  createWithNutrients(input: {
+  createMyDishWithNutrients(input: {
     userId: number;
     name: string;
     imageUrl: string;
@@ -177,19 +177,19 @@ export const dishRepository = {
 
       return tx.dish.findUniqueOrThrow({
         where: { dish_id: dish.dish_id },
-        select: mineDishSelect,
+        select: dishSummarySelect,
       });
     });
   },
 
-  findMineById(userId: number, dishId: number) {
+  findMyDishById(userId: number, dishId: number) {
     return prisma.dish.findFirst({
       where: { dish_id: dishId, created_by: userId, is_global: false },
       select: dishDetailSelect,
     });
   },
 
-  updateWithNutrients(input: {
+  updateMyDishWithNutrients(input: {
     dishId: number;
     userId: number;
     name: string;
@@ -229,12 +229,12 @@ export const dishRepository = {
 
       return tx.dish.findUniqueOrThrow({
         where: { dish_id: input.dishId },
-        select: mineDishSelect,
+        select: dishSummarySelect,
       });
     });
   },
 
-  deleteOwnedWithCleanup(userId: number, dishId: number) {
+  deleteMyDishWithCleanup(userId: number, dishId: number) {
     return prisma.$transaction(async (tx) => {
       const dish = await tx.dish.findFirst({
         where: { dish_id: dishId, created_by: userId, is_global: false },
@@ -247,21 +247,21 @@ export const dishRepository = {
     });
   },
 
-  listGlobal(search: string, skip: number, take: number) {
+  listGlobalDishes(search: string, skip: number, take: number) {
     return prisma.dish.findMany({
-      where: buildGlobalWhere(search),
-      select: mineDishSelect,
+      where: buildGlobalDishWhere(search),
+      select: dishSummarySelect,
       orderBy: { dish_name: "asc" },
       skip,
       take,
     });
   },
 
-  countGlobal(search: string) {
-    return prisma.dish.count({ where: buildGlobalWhere(search) });
+  countGlobalDishes(search: string) {
+    return prisma.dish.count({ where: buildGlobalDishWhere(search) });
   },
 
-  findGlobalById(dishId: number) {
+  findGlobalDishById(dishId: number) {
     return prisma.dish.findFirst({
       where: { dish_id: dishId, is_global: true },
       select: dishDetailSelect,
@@ -269,7 +269,7 @@ export const dishRepository = {
   },
 
   // Tìm món hệ thống bằng tên (unique, không phụ thuộc admin tạo)
-  findGlobalByName(name: string, excludeDishId?: number) {
+  findGlobalDishByName(name: string, excludeDishId?: number) {
     return prisma.dish.findFirst({
       where: {
         is_global: true,
@@ -280,7 +280,7 @@ export const dishRepository = {
     });
   },
 
-  createGlobalWithNutrients(input: {
+  createGlobalDishWithNutrients(input: {
     adminId: number;
     name: string;
     imageUrl: string;
@@ -306,12 +306,12 @@ export const dishRepository = {
 
       return tx.dish.findUniqueOrThrow({
         where: { dish_id: dish.dish_id },
-        select: mineDishSelect,
+        select: dishSummarySelect,
       });
     });
   },
 
-  updateGlobalWithNutrients(input: {
+  updateGlobalDishWithNutrients(input: {
     dishId: number;
     name: string;
     imageUrl?: string;
@@ -346,12 +346,12 @@ export const dishRepository = {
 
       return tx.dish.findUniqueOrThrow({
         where: { dish_id: input.dishId },
-        select: mineDishSelect,
+        select: dishSummarySelect,
       });
     });
   },
 
-  deleteGlobalWithCleanup(dishId: number) {
+  deleteGlobalDishWithCleanup(dishId: number) {
     return prisma.$transaction(async (tx) => {
       const dish = await tx.dish.findFirst({
         where: { dish_id: dishId, is_global: true },
@@ -364,6 +364,4 @@ export const dishRepository = {
   },
 };
 
-export const dishRepositoryHelpers = {
-  pickMacroValue,
-};
+export { pickMacroValue };

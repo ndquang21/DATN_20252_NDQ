@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServerError } from "../../utils/http.util";
 import { dishService } from "./dish.service";
 import {
   createDishBodySchema,
@@ -8,24 +9,7 @@ import {
   adminUpdateGlobalDishBodySchema,
 } from "./dish.validation";
 import { updateDishBodySchema } from "./dish.validation";
-import { v2 as cloudinary } from "cloudinary";
-
-const getPublicIdFromUrl = (url: string): string | null => {
-  try {
-    const parts = url.split("/upload/");
-    if (parts.length < 2) return null;
-    const publicIdWithExt = parts[1].split("/").slice(1).join("/");
-    return publicIdWithExt.split(".").slice(0, -1).join(".");
-  } catch {
-    return null;
-  }
-};
-
-async function cleanupCloudinaryImage(url: string | null | undefined) {
-  if (!url || url.includes("default_dish")) return;
-  const publicId = getPublicIdFromUrl(url);
-  if (publicId) await cloudinary.uploader.destroy(publicId);
-}
+import { destroyCloudinaryImage } from "../../config/cloudinary";
 
 function parseDishId(raw: string): number | null {
   const id = parseInt(raw, 10);
@@ -55,15 +39,12 @@ export const dishController = {
         pageSize,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async listMine(req: Request, res: Response) {
+  async listMyDishes(req: Request, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -78,21 +59,18 @@ export const dishController = {
       }
 
       const { page, pageSize } = parsed.data;
-      const result = await dishService.listMine(
+      const result = await dishService.listMyDishes(
         req.user.userId,
         page,
         pageSize,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async create(req: Request, res: Response) {
+  async createMyDish(req: Request, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -109,7 +87,7 @@ export const dishController = {
       const imageUrl =
         req.file && "path" in req.file ? (req.file.path as string) : undefined;
 
-      const result = await dishService.create(
+      const result = await dishService.createMyDish(
         req.user.userId,
         parsed.data.name,
         parsed.data.nutrients,
@@ -128,15 +106,12 @@ export const dishController = {
       }
 
       return res.status(201).json(result.dish);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async getMineById(req: Request<{ dishId: string }>, res: Response) {
+  async getMyDishById(req: Request<{ dishId: string }>, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -147,21 +122,18 @@ export const dishController = {
         return res.status(400).json({ error: "ID món không hợp lệ" });
       }
 
-      const dish = await dishService.getMineById(req.user.userId, dishId);
+      const dish = await dishService.getMyDishById(req.user.userId, dishId);
       if (!dish) {
         return res.status(404).json({ error: "Không tìm thấy món của bạn" });
       }
 
       return res.json(dish);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async update(req: Request<{ dishId: string }>, res: Response) {
+  async updateMyDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -183,7 +155,7 @@ export const dishController = {
       const newImageUrl =
         req.file && "path" in req.file ? (req.file.path as string) : undefined;
 
-      const result = await dishService.update(
+      const result = await dishService.updateMyDish(
         req.user.userId,
         dishId,
         parsed.data.name,
@@ -210,19 +182,16 @@ export const dishController = {
         result.oldImageUrl &&
         result.oldImageUrl !== newImageUrl
       ) {
-        await cleanupCloudinaryImage(result.oldImageUrl);
+        await destroyCloudinaryImage(result.oldImageUrl);
       }
 
       return res.json(result.dish);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async remove(req: Request<{ dishId: string }>, res: Response) {
+  async removeMyDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -233,22 +202,19 @@ export const dishController = {
         return res.status(400).json({ error: "ID món không hợp lệ" });
       }
 
-      const result = await dishService.remove(req.user.userId, dishId);
+      const result = await dishService.removeMyDish(req.user.userId, dishId);
       if (!result.ok) {
         return res.status(404).json({ error: "Không tìm thấy món của bạn" });
       }
 
-      await cleanupCloudinaryImage(result.imageUrl);
+      await destroyCloudinaryImage(result.imageUrl);
 
       return res.json({ message: "Đã xóa món thành công" });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
-  },
-  async listGlobal(req: Request, res: Response) {
+  },
+  async listGlobalDishes(req: Request, res: Response) {
     try {
       const parsed = adminGlobalDishesQuerySchema.safeParse(req.query);
       if (!parsed.success) {
@@ -259,42 +225,36 @@ export const dishController = {
       }
 
       const { search, page, pageSize } = parsed.data;
-      const result = await dishService.listGlobalForAdmin(
+      const result = await dishService.listGlobalDishes(
         search,
         page,
         pageSize,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async getGlobalById(req: Request<{ dishId: string }>, res: Response) {
+  async getGlobalDishById(req: Request<{ dishId: string }>, res: Response) {
     try {
       const dishId = parseDishId(req.params.dishId);
       if (dishId === null) {
         return res.status(400).json({ error: "ID món không hợp lệ" });
       }
 
-      const dish = await dishService.getGlobalById(dishId);
+      const dish = await dishService.getGlobalDishById(dishId);
       if (!dish) {
         return res.status(404).json({ error: "Không tìm thấy món hệ thống" });
       }
 
       return res.json(dish);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async createGlobal(req: Request, res: Response) {
+  async createGlobalDish(req: Request, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -311,7 +271,7 @@ export const dishController = {
       const imageUrl =
         req.file && "path" in req.file ? (req.file.path as string) : undefined;
 
-      const result = await dishService.createGlobal(
+      const result = await dishService.createGlobalDish(
         req.user.userId,
         parsed.data.name,
         parsed.data.nutrients,
@@ -330,15 +290,12 @@ export const dishController = {
       }
 
       return res.status(201).json(result.dish);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async updateGlobal(req: Request<{ dishId: string }>, res: Response) {
+  async updateGlobalDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       const dishId = parseDishId(req.params.dishId);
       if (dishId === null) {
@@ -356,7 +313,7 @@ export const dishController = {
       const newImageUrl =
         req.file && "path" in req.file ? (req.file.path as string) : undefined;
 
-      const result = await dishService.updateGlobal(
+      const result = await dishService.updateGlobalDish(
         dishId,
         parsed.data.name,
         parsed.data.nutrients,
@@ -382,38 +339,32 @@ export const dishController = {
         result.oldImageUrl &&
         result.oldImageUrl !== newImageUrl
       ) {
-        await cleanupCloudinaryImage(result.oldImageUrl);
+        await destroyCloudinaryImage(result.oldImageUrl);
       }
 
       return res.json(result.dish);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async removeGlobal(req: Request<{ dishId: string }>, res: Response) {
+  async removeGlobalDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       const dishId = parseDishId(req.params.dishId);
       if (dishId === null) {
         return res.status(400).json({ error: "ID món không hợp lệ" });
       }
 
-      const result = await dishService.removeGlobal(dishId);
+      const result = await dishService.removeGlobalDish(dishId);
       if (!result.ok) {
         return res.status(404).json({ error: "Không tìm thấy món hệ thống" });
       }
 
-      await cleanupCloudinaryImage(result.imageUrl);
+      await destroyCloudinaryImage(result.imageUrl);
 
       return res.json({ message: "Đã xóa món hệ thống thành công" });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 };

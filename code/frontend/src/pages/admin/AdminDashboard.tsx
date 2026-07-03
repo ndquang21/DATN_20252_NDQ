@@ -15,6 +15,7 @@ import UserDetail from "../../components/admin/UserDetail";
 import { adminDashboardService } from "../../services/adminDashboard.service";
 import type { AdminDashboardStats } from "../../types/adminDashboard";
 import type { UserRole } from "../../types/adminUser";
+import { formatDate, formatDateTime } from "../../utils/format.util";
 
 function StatCard({
   label,
@@ -43,20 +44,6 @@ function StatCard({
       )}
     </div>
   );
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("vi-VN");
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function roleLabel(role: UserRole) {

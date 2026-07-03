@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServerError } from "../../utils/http.util";
 import { authService } from "./auth.service";
 import { registerSchema, loginSchema } from "./auth.validation";
 import { forgotPasswordSchema, resetPasswordSchema} from "./auth.validation";
@@ -80,11 +81,8 @@ export const authController = {
 
       const result = await authService.forgotPassword(parsed.data);
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 

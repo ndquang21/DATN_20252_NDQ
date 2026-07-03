@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServerError } from "../../utils/http.util";
 import { dailyPlanService } from "./daily-plan.service";
 import {
   getDailyPlanQuerySchema,
@@ -42,15 +43,12 @@ export const dailyPlanController = {
         parseResult.data.date,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async finishMeal(req: Request, res: Response) {
+  async setMealFinished(req: Request, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -80,11 +78,8 @@ export const dailyPlanController = {
           .json({ error: "Không tìm thấy bữa ăn hoặc bạn không có quyền" });
       }
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -109,11 +104,8 @@ export const dailyPlanController = {
           .json({ error: "Không tìm thấy bữa ăn hoặc bạn không có quyền" });
       }
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -144,10 +136,8 @@ export const dailyPlanController = {
         return res.status(m.status).json({ error: m.error });
       }
       return res.status(201).json({ mealId: result.mealId, plan: result.plan });
-    } catch (error: unknown) {
-      if (error instanceof Error)
-        return res.status(500).json({ error: error.message });
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -181,10 +171,8 @@ export const dailyPlanController = {
         return res.status(m.status).json({ error: m.error });
       }
       return res.json(result.plan);
-    } catch (error: unknown) {
-      if (error instanceof Error)
-        return res.status(500).json({ error: error.message });
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -219,10 +207,8 @@ export const dailyPlanController = {
         return res.status(m.status).json({ error: m.error });
       }
       return res.json(result.plan);
-    } catch (error: unknown) {
-      if (error instanceof Error)
-        return res.status(500).json({ error: error.message });
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -246,10 +232,8 @@ export const dailyPlanController = {
         return res.status(m.status).json({ error: m.error });
       }
       return res.json(result.plan);
-    } catch (error: unknown) {
-      if (error instanceof Error)
-        return res.status(500).json({ error: error.message });
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 };

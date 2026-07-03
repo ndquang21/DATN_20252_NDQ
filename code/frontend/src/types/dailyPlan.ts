@@ -30,7 +30,6 @@ export type NutrientTotals = {
 };
 
 export type DailyPlanSummary = {
-  total: NutrientTotals;
   completed: NutrientTotals;
 };
 

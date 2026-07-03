@@ -45,9 +45,6 @@ type CurrentUserResponse = {
     TDEE: number | null;
     goal: string | null;
   };
-  metrics: {
-    tdee: number;
-  } | null;
 };
 
 const authRequestConfig: AxiosRequestConfig = {

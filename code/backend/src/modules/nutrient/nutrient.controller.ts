@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServerError } from "../../utils/http.util";
 import { nutrientService } from "./nutrient.service";
 import {
   createNutrientBodySchema,
@@ -10,11 +11,8 @@ export const nutrientController = {
     try {
       const result = await nutrientService.list();
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -41,11 +39,8 @@ export const nutrientController = {
       }
 
       return res.status(201).json(result.nutrient);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -86,11 +81,8 @@ export const nutrientController = {
       }
 
       return res.json(result.nutrient);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -116,11 +108,8 @@ export const nutrientController = {
       }
 
       return res.json(result.nutrient);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 };

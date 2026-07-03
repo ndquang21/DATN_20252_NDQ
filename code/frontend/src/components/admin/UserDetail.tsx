@@ -3,6 +3,7 @@ import { Loader2, X } from "lucide-react";
 import { adminUserService } from "../../services/adminUser.service";
 import type { AdminUserDetail, Gender, UserRole } from "../../types/adminUser";
 import { DEFAULT_AVATAR_URL } from "../../constants/default-images";
+import { formatDate, formatDateTime } from "../../utils/format.util";
 
 type Props = {
   userId: number | null;
@@ -16,15 +17,6 @@ const GENDER_LABEL: Record<Gender, string> = {
 
 function roleLabel(role: UserRole) {
   return role === "admin" ? "Admin" : "User";
-}
-
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("vi-VN");
-}
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("vi-VN");
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

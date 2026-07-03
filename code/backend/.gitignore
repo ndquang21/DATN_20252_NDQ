@@ -4,3 +4,6 @@ node_modules
 # Ignore Prisma Client generated code
 prisma/generated/
 prisma/migrations/
+# Build output (mã biên dịch)
+dist/
+*.tsbuildinfo

@@ -12,4 +12,4 @@ router.patch("/meals/:mealId/dishes/:dishId", dailyPlanController.updateDish);
 router.delete("/meals/:mealId/dishes/:dishId", dailyPlanController.removeDish);
 
 router.get("/meals/:mealId/nutrients", dailyPlanController.getMealNutrients);
-router.patch("/meals/:mealId/finish", dailyPlanController.finishMeal);
+router.patch("/meals/:mealId/finish", dailyPlanController.setMealFinished);

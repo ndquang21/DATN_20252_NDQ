@@ -8,11 +8,7 @@ import type {
   ApplySuggestPlanScope,
 } from "../../types/suggestPlan";
 import type { MealType } from "../../types/dailyPlan";
-
-function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+import { todayStr } from "../../utils/format.util";
 
 const MEAL_TYPE_OPTIONS: { value: MealType; label: string }[] = [
   { value: "breakfast", label: "Sáng" },

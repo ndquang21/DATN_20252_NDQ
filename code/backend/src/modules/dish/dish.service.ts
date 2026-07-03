@@ -1,64 +1,62 @@
-import { Prisma } from "../../../prisma/generated/prisma/client";
-import { dishRepository, dishRepositoryHelpers } from "./dish.repository";
+import { Prisma, NutrientUnit } from "../../../prisma/generated/prisma/client";
+import { dishRepository, pickMacroValue } from "./dish.repository";
 import { nutrientRepository } from "../nutrient/nutrient.repository";
 import {
-  CreateDishResponseDTO,
+  DishSummaryDTO,
   DishSearchItemDTO,
   DishSearchResponseDTO,
   MyDishesResponseDTO,
   AdminGlobalDishDetailDTO,
   AdminGlobalDishListResponseDTO,
 } from "./dish.dto";
-import { MyDishDetailDTO } from "./dish.dto";
+import { DishDetailDTO } from "./dish.dto";
 import {
   LOCKED_MACRO_NAMES,
   NUTRIENT_NAMES,
 } from "../../constants/nutrient-names";
 import { DEFAULT_DISH_IMAGE_URL } from "../../constants/default-images";
 
-const REQUIRED_MACRO_NAMES = LOCKED_MACRO_NAMES;
-
-const DEFAULT_DISH_IMAGE = DEFAULT_DISH_IMAGE_URL;
-
-function toMyDishItem(d: {
+function toDishSummary(d: {
   dish_id: number;
   dish_name: string;
   image_url: string | null;
   dish_nutrients: { value: number; nutrient: { name: string } }[];
-}): CreateDishResponseDTO {
+}): DishSummaryDTO {
   const dn = d.dish_nutrients;
   return {
     dishId: d.dish_id,
     name: d.dish_name,
     imageUrl: d.image_url,
     caloriesPer100g: Math.round(
-      dishRepositoryHelpers.pickMacroValue(dn, NUTRIENT_NAMES.CALORIES),
+      pickMacroValue(dn, NUTRIENT_NAMES.CALORIES),
     ),
     proteinPer100g:
       Math.round(
-        dishRepositoryHelpers.pickMacroValue(dn, NUTRIENT_NAMES.PROTEIN) * 10,
+        pickMacroValue(dn, NUTRIENT_NAMES.PROTEIN) * 10,
       ) / 10,
     carbPer100g:
       Math.round(
-        dishRepositoryHelpers.pickMacroValue(dn, NUTRIENT_NAMES.CARBOHYDRATE) *
+        pickMacroValue(dn, NUTRIENT_NAMES.CARBOHYDRATE) *
           10,
       ) / 10,
     fatPer100g:
       Math.round(
-        dishRepositoryHelpers.pickMacroValue(dn, NUTRIENT_NAMES.FAT) * 10,
+        pickMacroValue(dn, NUTRIENT_NAMES.FAT) * 10,
       ) / 10,
   };
 }
 
-function toGlobalDishDetail(row: {
+// Map 1 món (kèm đầy đủ chất dinh dưỡng) sang DTO chi tiết.
+// Dùng chung cho cả món cá nhân (getMyDishById) và món hệ thống (getGlobalDishById).
+function toDishDetail(row: {
   dish_id: number;
   dish_name: string;
   image_url: string | null;
   dish_nutrients: {
     value: number;
-    nutrient: { nutrient_id: number; name: string; unit: string };
+    nutrient: { nutrient_id: number; name: string; unit: NutrientUnit };
   }[];
-}): AdminGlobalDishDetailDTO {
+}): DishDetailDTO {
   return {
     dishId: row.dish_id,
     name: row.dish_name,
@@ -66,14 +64,13 @@ function toGlobalDishDetail(row: {
     nutrients: row.dish_nutrients.map((dn) => ({
       nutrientId: dn.nutrient.nutrient_id,
       name: dn.nutrient.name,
-      unit: dn.nutrient
-        .unit as AdminGlobalDishDetailDTO["nutrients"][number]["unit"],
+      unit: dn.nutrient.unit,
       value: dn.value,
     })),
   };
 }
 
-async function assertValidNutrients(
+async function areNutrientsValid(
   nutrients: { nutrientId: number; value: number }[],
 ): Promise<boolean> {
   const ids = nutrients.map((n) => n.nutrientId);
@@ -81,7 +78,7 @@ async function assertValidNutrients(
   if (known.length !== ids.length) return false;
 
   const knownNames = new Set(known.map((n) => n.name));
-  for (const macro of REQUIRED_MACRO_NAMES) {
+  for (const macro of LOCKED_MACRO_NAMES) {
     if (!knownNames.has(macro)) return false;
   }
   return true;
@@ -97,8 +94,8 @@ export const dishService = {
     const skip = (page - 1) * pageSize;
 
     const [rows, total] = await Promise.all([
-      dishRepository.search(userId, search, skip, pageSize),
-      dishRepository.count(userId, search),
+      dishRepository.searchDishes(userId, search, skip, pageSize),
+      dishRepository.countDishes(userId, search),
     ]);
 
     const items: DishSearchItemDTO[] = rows.map((d) => ({
@@ -111,7 +108,7 @@ export const dishService = {
     return { items, total, page, pageSize };
   },
 
-  async listMine(
+  async listMyDishes(
     userId: number,
     page: number,
     pageSize: number,
@@ -119,48 +116,39 @@ export const dishService = {
     const skip = (page - 1) * pageSize;
 
     const [rows, total] = await Promise.all([
-      dishRepository.findMine(userId, skip, pageSize),
-      dishRepository.countMine(userId),
+      dishRepository.listMyDishes(userId, skip, pageSize),
+      dishRepository.countMyDishes(userId),
     ]);
 
     return {
-      items: rows.map(toMyDishItem),
+      items: rows.map(toDishSummary),
       total,
       page,
       pageSize,
     };
   },
 
-  async create(
+  async createMyDish(
     userId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
   ): Promise<
-    | { ok: true; dish: CreateDishResponseDTO }
+    | { ok: true; dish: DishSummaryDTO }
     | { ok: false; reason: "invalid_nutrients" | "duplicate_name" }
   > {
-    const ids = nutrients.map((n) => n.nutrientId);
-    const known = await nutrientRepository.findByIds(ids);
-    if (known.length !== ids.length) {
+    if (!(await areNutrientsValid(nutrients))) {
       return { ok: false, reason: "invalid_nutrients" };
     }
 
-    const knownNames = new Set(known.map((n) => n.name));
-    for (const macro of REQUIRED_MACRO_NAMES) {
-      if (!knownNames.has(macro)) {
-        return { ok: false, reason: "invalid_nutrients" };
-      }
-    }
-
     try {
-      const created = await dishRepository.createWithNutrients({
+      const created = await dishRepository.createMyDishWithNutrients({
         userId,
         name,
-        imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE,
+        imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE_URL,
         nutrients,
       });
-      return { ok: true, dish: toMyDishItem(created) };
+      return { ok: true, dish: toDishSummary(created) };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -172,48 +160,37 @@ export const dishService = {
     }
   },
 
-  async getMineById(
+  async getMyDishById(
     userId: number,
     dishId: number,
-  ): Promise<MyDishDetailDTO | null> {
-    const row = await dishRepository.findMineById(userId, dishId);
+  ): Promise<DishDetailDTO | null> {
+    const row = await dishRepository.findMyDishById(userId, dishId);
     if (!row) return null;
-
-    return {
-      dishId: row.dish_id,
-      name: row.dish_name,
-      imageUrl: row.image_url,
-      nutrients: row.dish_nutrients.map((dn) => ({
-        nutrientId: dn.nutrient.nutrient_id,
-        name: dn.nutrient.name,
-        unit: dn.nutrient.unit,
-        value: dn.value,
-      })),
-    };
+    return toDishDetail(row);
   },
 
-  async update(
+  async updateMyDish(
     userId: number,
     dishId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
   ): Promise<
-    | { ok: true; dish: CreateDishResponseDTO; oldImageUrl: string | null }
+    | { ok: true; dish: DishSummaryDTO; oldImageUrl: string | null }
     | {
         ok: false;
         reason: "not_found" | "invalid_nutrients" | "duplicate_name";
       }
   > {
-    const existing = await dishRepository.findMineById(userId, dishId);
+    const existing = await dishRepository.findMyDishById(userId, dishId);
     if (!existing) return { ok: false, reason: "not_found" };
 
-    if (!(await assertValidNutrients(nutrients))) {
+    if (!(await areNutrientsValid(nutrients))) {
       return { ok: false, reason: "invalid_nutrients" };
     }
 
     try {
-      const updated = await dishRepository.updateWithNutrients({
+      const updated = await dishRepository.updateMyDishWithNutrients({
         dishId,
         userId,
         name,
@@ -224,7 +201,7 @@ export const dishService = {
 
       return {
         ok: true,
-        dish: toMyDishItem(updated),
+        dish: toDishSummary(updated),
         oldImageUrl: existing.image_url,
       };
     } catch (error) {
@@ -238,68 +215,69 @@ export const dishService = {
     }
   },
 
-  async remove(
+  async removeMyDish(
     userId: number,
     dishId: number,
   ): Promise<
     { ok: true; imageUrl: string | null } | { ok: false; reason: "not_found" }
   > {
-    const deleted = await dishRepository.deleteOwnedWithCleanup(userId, dishId);
+    const deleted = await dishRepository.deleteMyDishWithCleanup(userId, dishId);
     if (!deleted) return { ok: false, reason: "not_found" };
     return { ok: true, imageUrl: deleted.image_url };
-  },
-  async listGlobalForAdmin(
+  },
+  
+  async listGlobalDishes(
     search: string,
     page: number,
     pageSize: number,
   ): Promise<AdminGlobalDishListResponseDTO> {
     const skip = (page - 1) * pageSize;
     const [rows, total] = await Promise.all([
-      dishRepository.listGlobal(search, skip, pageSize),
-      dishRepository.countGlobal(search),
+      dishRepository.listGlobalDishes(search, skip, pageSize),
+      dishRepository.countGlobalDishes(search),
     ]);
     return {
-      items: rows.map(toMyDishItem),
+      items: rows.map(toDishSummary),
       total,
       page,
       pageSize,
     };
   },
 
-  async getGlobalById(
+  async getGlobalDishById(
     dishId: number,
   ): Promise<AdminGlobalDishDetailDTO | null> {
-    const row = await dishRepository.findGlobalById(dishId);
+    const row = await dishRepository.findGlobalDishById(dishId);
     if (!row) return null;
-    return toGlobalDishDetail(row);
+    return toDishDetail(row);
   },
 
-  async createGlobal(
+  async createGlobalDish(
     adminId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
   ): Promise<
-    | { ok: true; dish: CreateDishResponseDTO }
+    | { ok: true; dish: DishSummaryDTO }
     | { ok: false; reason: "invalid_nutrients" | "duplicate_name" }
   > {
-    if (!(await assertValidNutrients(nutrients))) {
+    if (!(await areNutrientsValid(nutrients))) {
       return { ok: false, reason: "invalid_nutrients" };
     }
 
     const trimmedName = name.trim();
-    if (await dishRepository.findGlobalByName(trimmedName)) {
+    if (await dishRepository.findGlobalDishByName(trimmedName)) {
       return { ok: false, reason: "duplicate_name" };
     }
 
     try {
-      const created = await dishRepository.createGlobalWithNutrients({
+      const created = await dishRepository.createGlobalDishWithNutrients({
         adminId,
         name: trimmedName,
-        imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE,
+        imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE_URL,
         nutrients,
       });
-      return { ok: true, dish: toMyDishItem(created) };
+      return { ok: true, dish: toDishSummary(created) };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -311,32 +289,32 @@ export const dishService = {
     }
   },
 
-  async updateGlobal(
+  async updateGlobalDish(
     dishId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
   ): Promise<
-    | { ok: true; dish: CreateDishResponseDTO; oldImageUrl: string | null }
+    | { ok: true; dish: DishSummaryDTO; oldImageUrl: string | null }
     | {
         ok: false;
         reason: "not_found" | "invalid_nutrients" | "duplicate_name";
       }
   > {
-    const existing = await dishRepository.findGlobalById(dishId);
+    const existing = await dishRepository.findGlobalDishById(dishId);
     if (!existing) return { ok: false, reason: "not_found" };
 
-    if (!(await assertValidNutrients(nutrients))) {
+    if (!(await areNutrientsValid(nutrients))) {
       return { ok: false, reason: "invalid_nutrients" };
     }
 
     const trimmedName = name.trim();
-    if (await dishRepository.findGlobalByName(trimmedName, dishId)) {
+    if (await dishRepository.findGlobalDishByName(trimmedName, dishId)) {
       return { ok: false, reason: "duplicate_name" };
     }
 
     try {
-      const updated = await dishRepository.updateGlobalWithNutrients({
+      const updated = await dishRepository.updateGlobalDishWithNutrients({
         dishId,
         name: trimmedName,
         imageUrl,
@@ -346,7 +324,7 @@ export const dishService = {
 
       return {
         ok: true,
-        dish: toMyDishItem(updated),
+        dish: toDishSummary(updated),
         oldImageUrl: existing.image_url,
       };
     } catch (error) {
@@ -360,12 +338,12 @@ export const dishService = {
     }
   },
 
-  async removeGlobal(
+  async removeGlobalDish(
     dishId: number,
   ): Promise<
     { ok: true; imageUrl: string | null } | { ok: false; reason: "not_found" }
   > {
-    const deleted = await dishRepository.deleteGlobalWithCleanup(dishId);
+    const deleted = await dishRepository.deleteGlobalDishWithCleanup(dishId);
     if (!deleted) return { ok: false, reason: "not_found" };
     return { ok: true, imageUrl: deleted.image_url };
   },

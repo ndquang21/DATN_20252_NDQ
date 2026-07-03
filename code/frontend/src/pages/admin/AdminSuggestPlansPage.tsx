@@ -21,6 +21,7 @@ import type {
   SuggestPlanListItem,
   SuggestPlanListSort,
 } from "../../types/suggestPlan";
+import { formatDate } from "../../utils/format.util";
 
 const PAGE_SIZE = 20;
 
@@ -30,10 +31,6 @@ const SORT_OPTIONS: { value: SuggestPlanListSort; label: string }[] = [
   { value: "public_first", label: "Công khai trước" },
   { value: "hidden_first", label: "Ẩn trước" },
 ];
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("vi-VN");
-}
 
 export default function AdminSuggestPlansPage() {
   const navigate = useNavigate();

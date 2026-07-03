@@ -1,6 +1,6 @@
 import { NutrientUnit } from "../../../prisma/generated/prisma/client";
 
-export type NutrientItemDTO = {
+export type NutrientDetailDTO = {
   nutrientId: number;
   name: string;
   isMacro: boolean;
@@ -9,7 +9,5 @@ export type NutrientItemDTO = {
 };
 
 export type NutrientListResponseDTO = {
-  items: NutrientItemDTO[];
+  items: NutrientDetailDTO[];
 };
-
-export type NutrientDetailDTO = NutrientItemDTO;

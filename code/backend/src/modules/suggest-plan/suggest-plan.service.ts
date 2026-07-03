@@ -1,12 +1,9 @@
 import { MealType } from "../../../prisma/generated/prisma/client";
-import { NUTRIENT_NAMES } from "../../constants/nutrient-names";
-import { DEFAULT_DISH_IMAGE_URL } from "../../constants/default-images";
+import { round2, buildMealsAndSummary } from "../../utils/meal.util";
 
 import {
   DailyPlanSummaryDTO,
-  DishItemDTO,
   MealItemDTO,
-  NutrientTotalsDTO,
   MealNutrientsDTO,
   NutrientValueDTO,
 } from "../daily-plan/daily-plan.dto";
@@ -30,19 +27,7 @@ import type {
 } from "./suggest-plan.dto";
 import { suggestPlanRepository, type SuggestPlanListSort, } from "./suggest-plan.repository";
 
-const MEAL_ORDER: Record<string, number> = {
-  breakfast: 0,
-  lunch: 1,
-  dinner: 2,
-  snack: 3,
-};
-
 const REQUIRED_MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner"];
-
-const N_CAL = NUTRIENT_NAMES.CALORIES;
-const N_PRO = NUTRIENT_NAMES.PROTEIN;
-const N_CARB = NUTRIENT_NAMES.CARBOHYDRATE;
-const N_FAT = NUTRIENT_NAMES.FAT;
 
 type RawDishNutrient = {
   value: number;
@@ -94,26 +79,6 @@ type RawSuggestPlanWithDays = {
   }>;
 };
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
-function emptyTotals(): NutrientTotalsDTO {
-  return { calories: 0, protein: 0, carb: 0, fat: 0 };
-}
-
-function pickCoverImage(dishes: DishItemDTO[]): string {
-  if (dishes.length === 0) return DEFAULT_DISH_IMAGE_URL;
-  const nonDefault = dishes.filter(
-    (d) => d.imageUrl && !d.imageUrl.includes("default_dish"),
-  );
-  const pool = nonDefault.length > 0 ? nonDefault : dishes;
-  const cover = pool.reduce(
-    (best, d) => (d.calories > best.calories ? d : best),
-    pool[0],
-  );
-  return cover.imageUrl ?? DEFAULT_DISH_IMAGE_URL;
-}
 
 function isDayCompleteFromMeals(meals: MealItemDTO[]): boolean {
   return REQUIRED_MEAL_TYPES.every((type) => {
@@ -130,96 +95,19 @@ function isDayCompleteFromRaw(dailyPlan: RawListDailyPlan): boolean {
   });
 }
 
-function mapDailyPlanEntity(dailyPlan: RawDailyPlan): {
+function toDayMealsAndSummary(dailyPlan: RawDailyPlan): {
   meals: MealItemDTO[];
   summary: DailyPlanSummaryDTO;
 } {
-  const meals: MealItemDTO[] = dailyPlan.daily_menus
-    .map((dm) => {
-      const meal = dm.meal;
-
-      let mCal = 0;
-      let mPro = 0;
-      let mCarb = 0;
-      let mFat = 0;
-
-      const dishes: DishItemDTO[] = meal.meal_menus.map((mm) => {
-        const valueByName = new Map(
-          mm.dish.dish_nutrients.map((dn) => [dn.nutrient.name, dn.value]),
-        );
-        const q = mm.quantity;
-        const cal = (valueByName.get(N_CAL) ?? 0) * q;
-
-        mCal += cal;
-        mPro += (valueByName.get(N_PRO) ?? 0) * q;
-        mCarb += (valueByName.get(N_CARB) ?? 0) * q;
-        mFat += (valueByName.get(N_FAT) ?? 0) * q;
-
-        return {
-          dishId: mm.dish.dish_id,
-          name: mm.dish.dish_name,
-          imageUrl: mm.dish.image_url,
-          quantity: q,
-          grams: Math.round(q * 100),
-          calories: Math.round(cal),
-        };
-      });
-
-      return {
-        mealId: meal.meal_id,
-        type: meal.meal_type,
-        isFinished: meal.is_finished,
-        calories: round1(mCal),
-        protein: round1(mPro),
-        carb: round1(mCarb),
-        fat: round1(mFat),
-        coverImageUrl: pickCoverImage(dishes),
-        dishes,
-      };
-    })
-    .sort((a, b) => (MEAL_ORDER[a.type] ?? 99) - (MEAL_ORDER[b.type] ?? 99));
-
-  const total = emptyTotals();
-  const completed = emptyTotals();
-
-  for (const meal of meals) {
-    total.calories += meal.calories;
-    total.protein += meal.protein;
-    total.carb += meal.carb;
-    total.fat += meal.fat;
-    if (meal.isFinished) {
-      completed.calories += meal.calories;
-      completed.protein += meal.protein;
-      completed.carb += meal.carb;
-      completed.fat += meal.fat;
-    }
-  }
-
-  return {
-    meals,
-    summary: {
-      total: {
-        calories: round1(total.calories),
-        protein: round1(total.protein),
-        carb: round1(total.carb),
-        fat: round1(total.fat),
-      },
-      completed: {
-        calories: round1(completed.calories),
-        protein: round1(completed.protein),
-        carb: round1(completed.carb),
-        fat: round1(completed.fat),
-      },
-    },
-  };
+  return buildMealsAndSummary(dailyPlan.daily_menus);
 }
 
-function mapDay(
+function toSuggestPlanDay(
   dayIndex: number,
   dailyPlanId: number,
   dailyPlan: RawDailyPlan,
 ): SuggestPlanDayDTO {
-  const mapped = mapDailyPlanEntity(dailyPlan);
+  const mapped = toDayMealsAndSummary(dailyPlan);
   return {
     dayIndex,
     dailyPlanId,
@@ -229,9 +117,9 @@ function mapDay(
   };
 }
 
-function toDetailDTO(plan: RawSuggestPlanWithDays): SuggestPlanDetailDTO {
+function toSuggestPlanDetail(plan: RawSuggestPlanWithDays): SuggestPlanDetailDTO {
   const days = plan.suggest_plan_days.map((spd) =>
-    mapDay(spd.day_index, spd.daily_plan_id, spd.daily_plan),
+    toSuggestPlanDay(spd.day_index, spd.daily_plan_id, spd.daily_plan),
   );
   const completeDayCount = days.filter((d) => d.isComplete).length;
   const canPublish = plan.day_count > 0 && completeDayCount === plan.day_count;
@@ -251,7 +139,7 @@ function toDetailDTO(plan: RawSuggestPlanWithDays): SuggestPlanDetailDTO {
   };
 }
 
-function toListItemDTO(plan: {
+function toSuggestPlanListItem(plan: {
   suggest_plan_id: number;
   name: string;
   description: string | null;
@@ -279,7 +167,7 @@ function toListItemDTO(plan: {
   };
 }
 
-function toPublicListItemDTO(plan: {
+function toPublicSuggestPlanListItem(plan: {
   suggest_plan_id: number;
   name: string;
   description: string | null;
@@ -295,9 +183,9 @@ function toPublicListItemDTO(plan: {
   };
 }
 
-function toPublicDetailDTO(plan: RawSuggestPlanWithDays): SuggestPlanPublicDetailDTO {
+function toPublicSuggestPlanDetail(plan: RawSuggestPlanWithDays): SuggestPlanPublicDetailDTO {
   const days: SuggestPlanPublicDayDTO[] = plan.suggest_plan_days.map((spd) => {
-    const mapped = mapDay(spd.day_index, spd.daily_plan_id, spd.daily_plan);
+    const mapped = toSuggestPlanDay(spd.day_index, spd.daily_plan_id, spd.daily_plan);
     return {
       dayIndex: mapped.dayIndex,
       isComplete: mapped.isComplete,
@@ -316,11 +204,7 @@ function toPublicDetailDTO(plan: RawSuggestPlanWithDays): SuggestPlanPublicDetai
   };
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-function mapMealNutrientsFromRaw(
+function toMealNutrients(
   meal: NonNullable<Awaited<ReturnType<typeof dailyPlanRepository.findMealWithNutrients>>>,
   catalog: Awaited<ReturnType<typeof dailyPlanRepository.findAllNutrients>>,
 ): MealNutrientsDTO {
@@ -369,12 +253,12 @@ export const suggestPlanService = {
   ): Promise<SuggestPlanListResponseDTO> {
     const skip = (page - 1) * pageSize;
     const [rows, total] = await Promise.all([
-      suggestPlanRepository.findManyForList(search, skip, pageSize, sort),
-      suggestPlanRepository.countForList(search),
+      suggestPlanRepository.listForAdmin(search, skip, pageSize, sort),
+      suggestPlanRepository.countForAdmin(search),
     ]);
 
     return {
-      items: rows.map(toListItemDTO),
+      items: rows.map(toSuggestPlanListItem),
       total,
       page,
       pageSize,
@@ -389,12 +273,12 @@ export const suggestPlanService = {
   ): Promise<SuggestPlanPublicListResponseDTO> {
     const skip = (page - 1) * pageSize;
     const [rows, total] = await Promise.all([
-      suggestPlanRepository.findManyPublicForList(search, skip, pageSize, sort),
-      suggestPlanRepository.countPublicForList(search),
+      suggestPlanRepository.listPublic(search, skip, pageSize, sort),
+      suggestPlanRepository.countPublic(search),
     ]);
 
     return {
-      items: rows.map(toPublicListItemDTO),
+      items: rows.map(toPublicSuggestPlanListItem),
       total,
       page,
       pageSize,
@@ -412,7 +296,7 @@ export const suggestPlanService = {
 
     return {
       ok: true,
-      plan: toPublicDetailDTO(plan as RawSuggestPlanWithDays),
+      plan: toPublicSuggestPlanDetail(plan as RawSuggestPlanWithDays),
     };
   },
 
@@ -427,7 +311,7 @@ export const suggestPlanService = {
     if (!meal) return null;
 
     const catalog = await dailyPlanRepository.findAllNutrients();
-    return mapMealNutrientsFromRaw(meal, catalog);
+    return toMealNutrients(meal, catalog);
   },
 
   async getDayNutrients(
@@ -463,7 +347,7 @@ export const suggestPlanService = {
         dm.meal.meal_id,
       );
       if (meal) {
-        mealTotalsList.push(mapMealNutrientsFromRaw(meal, catalog).totals);
+        mealTotalsList.push(toMealNutrients(meal, catalog).totals);
       }
     }
 
@@ -519,7 +403,7 @@ export const suggestPlanService = {
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
     if (!plan) return { ok: false, reason: "not_found" };
 
-    return { ok: true, plan: toDetailDTO(plan as RawSuggestPlanWithDays) };
+    return { ok: true, plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays) };
   },
 
   async updateMetadata(
@@ -547,7 +431,7 @@ export const suggestPlanService = {
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
     if (!plan) return { ok: false, reason: "not_found" };
 
-    return { ok: true, plan: toDetailDTO(plan as RawSuggestPlanWithDays), oldImageUrl: owned.image_url,};  
+    return { ok: true, plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays), oldImageUrl: owned.image_url,};  
   },
 
   async remove(
@@ -581,7 +465,7 @@ export const suggestPlanService = {
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
     if (!plan) return { ok: false, reason: "not_found" };
 
-    const detail = toDetailDTO(plan as RawSuggestPlanWithDays);
+    const detail = toSuggestPlanDetail(plan as RawSuggestPlanWithDays);
     if (isPublic && !detail.canPublish) {
       return { ok: false, reason: "incomplete" };
     }
@@ -625,7 +509,7 @@ export const suggestPlanService = {
     );
     if (!dayRow) return { ok: false, reason: "not_found" };
 
-    const day = mapDay(
+    const day = toSuggestPlanDay(
       dayRow.day_index,
       dayRow.daily_plan_id,
       dayRow.daily_plan as RawDailyPlan,
@@ -681,14 +565,14 @@ export const suggestPlanService = {
       result: {
         dayCount: removed.dayCount,
         deletedDayIndex: removed.deletedDayIndex,
-        plan: toDetailDTO(plan as RawSuggestPlanWithDays),
+        plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays),
       },
     };
   },  async revalidatePublicStatus(suggestPlanId: number): Promise<void> {
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
     if (!plan || !plan.is_public) return;
 
-    const detail = toDetailDTO(plan as RawSuggestPlanWithDays);
+    const detail = toSuggestPlanDetail(plan as RawSuggestPlanWithDays);
     if (!detail.canPublish) {
       await suggestPlanRepository.setPublic(suggestPlanId, false);
     }

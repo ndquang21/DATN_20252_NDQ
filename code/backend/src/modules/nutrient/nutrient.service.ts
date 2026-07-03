@@ -3,17 +3,16 @@ import { isLockedMacroName } from "../../constants/nutrient-names";
 import { nutrientRepository } from "./nutrient.repository";
 import {
   NutrientDetailDTO,
-  NutrientItemDTO,
   NutrientListResponseDTO,
 } from "./nutrient.dto";
 import { NutrientUnit } from "../../../prisma/generated/prisma/client";
 
-function toItemDTO(row: {
+function toNutrientDetail(row: {
   nutrient_id: number;
   name: string;
   is_macro: boolean;
   unit: NutrientUnit;
-}): NutrientItemDTO {
+}): NutrientDetailDTO {
   return {
     nutrientId: row.nutrient_id,
     name: row.name,
@@ -26,7 +25,7 @@ function toItemDTO(row: {
 export const nutrientService = {
   async list(): Promise<NutrientListResponseDTO> {
     const rows = await nutrientRepository.findAll();
-    return { items: rows.map(toItemDTO) };
+    return { items: rows.map(toNutrientDetail) };
   },
 
   async create(
@@ -38,7 +37,7 @@ export const nutrientService = {
   > {
     try {
       const created = await nutrientRepository.create({ name, unit });
-      return { ok: true, nutrient: toItemDTO(created) };
+      return { ok: true, nutrient: toNutrientDetail(created) };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -69,7 +68,7 @@ export const nutrientService = {
 
     try {
       const updated = await nutrientRepository.update(id, { name, unit });
-      return { ok: true, nutrient: toItemDTO(updated) };
+      return { ok: true, nutrient: toNutrientDetail(updated) };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -94,6 +93,6 @@ export const nutrientService = {
     }
 
     const deleted = await nutrientRepository.delete(id);
-    return { ok: true, nutrient: toItemDTO(deleted) };
+    return { ok: true, nutrient: toNutrientDetail(deleted) };
   },
 };

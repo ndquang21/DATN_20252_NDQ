@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServerError } from "../../utils/http.util";
 import { suggestPlanService } from "./suggest-plan.service";
 import {
   createSuggestPlanBodySchema,
@@ -12,26 +13,9 @@ import {
   applySuggestPlanBodySchema,
 } from "./suggest-plan.validation";
 import { suggestPlanApplyService } from "./suggest-plan-apply.service";
-import { v2 as cloudinary } from "cloudinary";
+import { destroyCloudinaryImage } from "../../config/cloudinary";
 
-const getPublicIdFromUrl = (url: string): string | null => {
-  try {
-    const parts = url.split("/upload/");
-    if (parts.length < 2) return null;
-    const publicIdWithExt = parts[1].split("/").slice(1).join("/");
-    return publicIdWithExt.split(".").slice(0, -1).join(".");
-  } catch {
-    return null;
-  }
-};
-
-async function cleanupCloudinaryImage(url: string | null | undefined) {
-  if (!url || url.includes("default_dish")) return;
-  const publicId = getPublicIdFromUrl(url);
-  if (publicId) await cloudinary.uploader.destroy(publicId);
-}
-
-function adminUserId(req: Request): number | null {
+function getAdminUserId(req: Request): number | null {
   return req.user?.userId ?? null;
 }
 
@@ -58,11 +42,8 @@ export const suggestPlanController = {
         sort,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -88,11 +69,8 @@ export const suggestPlanController = {
       }
 
       return res.json(result.plan);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -125,15 +103,12 @@ export const suggestPlanController = {
       }
 
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
-  async applyPublic(req: Request<{ id: string }>, res: Response) {
+  async applySuggestPlan(req: Request<{ id: string }>, res: Response) {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
@@ -155,7 +130,7 @@ export const suggestPlanController = {
         });
       }
 
-      const result = await suggestPlanApplyService.applyPublic(
+      const result = await suggestPlanApplyService.apply(
         req.user.userId,
         idParsed.data.id,
         bodyParsed.data,
@@ -182,15 +157,12 @@ export const suggestPlanController = {
       }
 
       return res.json(result.data);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },  async list(req: Request, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -206,17 +178,14 @@ export const suggestPlanController = {
       const { search, page, pageSize, sort } = parsed.data;
       const result = await suggestPlanService.list(search, page, pageSize, sort);
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
   async create(req: Request, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -236,17 +205,14 @@ export const suggestPlanController = {
       );
 
       return res.status(201).json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
   async getById(req: Request<{ id: string }>, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -268,17 +234,14 @@ export const suggestPlanController = {
       }
 
       return res.json(result.plan);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
   async update(req: Request<{ id: string }>, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -341,21 +304,18 @@ export const suggestPlanController = {
         result.oldImageUrl &&
         result.oldImageUrl !== newImageUrl
       ) {
-        await cleanupCloudinaryImage(result.oldImageUrl);
+        await destroyCloudinaryImage(result.oldImageUrl);
       }
 
       return res.json(result.plan);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
   async remove(req: Request<{ id: string }>, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -377,17 +337,14 @@ export const suggestPlanController = {
       }
 
       return res.json({ message: "Đã xóa thực đơn gợi ý." });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
   async publish(req: Request<{ id: string }>, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -433,17 +390,14 @@ export const suggestPlanController = {
       }
 
       return res.json(result.result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
   async addDay(req: Request<{ id: string }>, res: Response) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -471,11 +425,8 @@ export const suggestPlanController = {
       }
 
       return res.status(201).json(result.result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -484,7 +435,7 @@ export const suggestPlanController = {
     res: Response,
   ) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -524,11 +475,8 @@ export const suggestPlanController = {
       }
 
       return res.json(result.result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 
@@ -537,7 +485,7 @@ export const suggestPlanController = {
     res: Response,
   ) {
     try {
-      const userId = adminUserId(req);
+      const userId = getAdminUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Vui lòng đăng nhập" });
       }
@@ -571,11 +519,8 @@ export const suggestPlanController = {
       }
 
       return res.json(result.data);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(500).json({ error: error.message });
-      }
-      return res.status(500).json({ error: "Internal Server Error" });
+    } catch (error) {
+      return sendServerError(res, error);
     }
   },
 };

@@ -5,31 +5,31 @@ import { uploadDishImage } from "../../config/cloudinary";
 
 export const router = Router();
 
-router.use(protect);router.get("/global", authorize("admin"), dishController.listGlobal);
+router.use(protect);router.get("/global", authorize("admin"), dishController.listGlobalDishes);
 router.get(
   "/global/:dishId",
   authorize("admin"),
-  dishController.getGlobalById,
+  dishController.getGlobalDishById,
 );
 router.post(
   "/global",
   authorize("admin"),
   uploadDishImage.single("image"),
-  dishController.createGlobal,
+  dishController.createGlobalDish,
 );
 router.patch(
   "/global/:dishId",
   authorize("admin"),
   uploadDishImage.single("image"),
-  dishController.updateGlobal,
+  dishController.updateGlobalDish,
 );
 router.delete(
   "/global/:dishId",
   authorize("admin"),
-  dishController.removeGlobal,
-);router.get("/mine", dishController.listMine);
-router.get("/mine/:dishId", dishController.getMineById);
+  dishController.removeGlobalDish,
+);router.get("/mine", dishController.listMyDishes);
+router.get("/mine/:dishId", dishController.getMyDishById);
 router.get("/", dishController.search);
-router.post("/", uploadDishImage.single("image"), dishController.create);
-router.patch("/:dishId", uploadDishImage.single("image"), dishController.update);
-router.delete("/:dishId", dishController.remove);
+router.post("/", uploadDishImage.single("image"), dishController.createMyDish);
+router.patch("/:dishId", uploadDishImage.single("image"), dishController.updateMyDish);
+router.delete("/:dishId", dishController.removeMyDish);
