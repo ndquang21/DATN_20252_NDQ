@@ -6,6 +6,7 @@ import { authService } from "../services/auth.service";
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
+  
   const navigate = useNavigate();
 
   const [newPassword, setNewPassword] = useState("");

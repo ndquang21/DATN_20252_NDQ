@@ -1,5 +1,6 @@
 import { MealType } from "../../../prisma/generated/prisma/client";
 import { round2, buildMealsAndSummary } from "../../utils/meal.util";
+import { appError } from "../../utils/http.util";
 
 import {
   DailyPlanSummaryDTO,
@@ -80,6 +81,7 @@ type RawSuggestPlanWithDays = {
 };
 
 
+// Ngày đủ hoàn chỉnh chưa, tính từ MealItemDTO đã build
 function isDayCompleteFromMeals(meals: MealItemDTO[]): boolean {
   return REQUIRED_MEAL_TYPES.every((type) => {
     const meal = meals.find((m) => m.type === type);
@@ -87,6 +89,7 @@ function isDayCompleteFromMeals(meals: MealItemDTO[]): boolean {
   });
 }
 
+// Ngày đủ hoàn chỉnh chưa, tính thẳng từ dữ liệu Prisma thô
 function isDayCompleteFromRaw(dailyPlan: RawListDailyPlan): boolean {
   const meals = dailyPlan.daily_menus.map((dm) => dm.meal);
   return REQUIRED_MEAL_TYPES.every((type) => {
@@ -95,6 +98,7 @@ function isDayCompleteFromRaw(dailyPlan: RawListDailyPlan): boolean {
   });
 }
 
+// Tái dùng logic tính bữa + tổng dinh dưỡng của Daily Plan
 function toDayMealsAndSummary(dailyPlan: RawDailyPlan): {
   meals: MealItemDTO[];
   summary: DailyPlanSummaryDTO;
@@ -102,6 +106,7 @@ function toDayMealsAndSummary(dailyPlan: RawDailyPlan): {
   return buildMealsAndSummary(dailyPlan.daily_menus);
 }
 
+// Map 1 ngày trong gói (đầy đủ, dùng cho admin)
 function toSuggestPlanDay(
   dayIndex: number,
   dailyPlanId: number,
@@ -117,6 +122,7 @@ function toSuggestPlanDay(
   };
 }
 
+// Map chi tiết đầy đủ 1 gói (đủ ngày, canPublish...)
 function toSuggestPlanDetail(plan: RawSuggestPlanWithDays): SuggestPlanDetailDTO {
   const days = plan.suggest_plan_days.map((spd) =>
     toSuggestPlanDay(spd.day_index, spd.daily_plan_id, spd.daily_plan),
@@ -139,6 +145,7 @@ function toSuggestPlanDetail(plan: RawSuggestPlanWithDays): SuggestPlanDetailDTO
   };
 }
 
+// Map 1 dòng trong danh sách gói (admin)
 function toSuggestPlanListItem(plan: {
   suggest_plan_id: number;
   name: string;
@@ -167,6 +174,7 @@ function toSuggestPlanListItem(plan: {
   };
 }
 
+// Map 1 dòng trong danh sách gói công khai
 function toPublicSuggestPlanListItem(plan: {
   suggest_plan_id: number;
   name: string;
@@ -183,6 +191,7 @@ function toPublicSuggestPlanListItem(plan: {
   };
 }
 
+// Map chi tiết gói công khai, ẩn dailyPlanId nội bộ
 function toPublicSuggestPlanDetail(plan: RawSuggestPlanWithDays): SuggestPlanPublicDetailDTO {
   const days: SuggestPlanPublicDayDTO[] = plan.suggest_plan_days.map((spd) => {
     const mapped = toSuggestPlanDay(spd.day_index, spd.daily_plan_id, spd.daily_plan);
@@ -204,6 +213,7 @@ function toPublicSuggestPlanDetail(plan: RawSuggestPlanWithDays): SuggestPlanPub
   };
 }
 
+// Tính dinh dưỡng đầy đủ 1 bữa, giống hệt Daily Plan
 function toMealNutrients(
   meal: NonNullable<Awaited<ReturnType<typeof dailyPlanRepository.findMealWithNutrients>>>,
   catalog: Awaited<ReturnType<typeof dailyPlanRepository.findAllNutrients>>,
@@ -244,7 +254,11 @@ function toMealNutrients(
   };
 }
 
+
 export const suggestPlanService = {
+  // ===== Admin: quản lý gói gợi ý =====
+
+  // Danh sách gói: tìm kiếm + phân trang + sắp xếp
   async list(
     search: string,
     page: number,
@@ -265,79 +279,30 @@ export const suggestPlanService = {
     };
   },
 
-  async listPublic(
-    search: string,
-    page: number,
-    pageSize: number,
-    sort: "created_desc" | "created_asc" = "created_desc",
-  ): Promise<SuggestPlanPublicListResponseDTO> {
-    const skip = (page - 1) * pageSize;
-    const [rows, total] = await Promise.all([
-      suggestPlanRepository.listPublic(search, skip, pageSize, sort),
-      suggestPlanRepository.countPublic(search),
-    ]);
-
-    return {
-      items: rows.map(toPublicSuggestPlanListItem),
-      total,
-      page,
-      pageSize,
-    };
-  },
-
-  async getPublicDetail(
-    suggestPlanId: number,
-  ): Promise<
-    | { ok: true; plan: SuggestPlanPublicDetailDTO }
-    | { ok: false; reason: "not_found" }
-  > {
-    const plan = await suggestPlanRepository.findPublicByIdWithDays(suggestPlanId);
-    if (!plan) return { ok: false, reason: "not_found" };
-
-    return {
-      ok: true,
-      plan: toPublicSuggestPlanDetail(plan as RawSuggestPlanWithDays),
-    };
-  },
-
-  async getPublicMealNutrients(
-    mealId: number,
-  ): Promise<MealNutrientsDTO | null> {
-    const allowed =
-      await suggestPlanRepository.isMealInPublicSuggestPlan(mealId);
-    if (!allowed) return null;
-
-    const meal = await dailyPlanRepository.findMealWithNutrients(mealId);
-    if (!meal) return null;
-
-    const catalog = await dailyPlanRepository.findAllNutrients();
-    return toMealNutrients(meal, catalog);
-  },
-
+  // Dinh dưỡng đầy đủ 1 ngày trong gói
   async getDayNutrients(
     suggestPlanId: number,
-    adminUserId: number,
     dayIndex: number,
-  ): Promise<
-    | { ok: true; data: SuggestPlanDayNutrientsDTO }
-    | { ok: false; reason: "not_found" | "invalid_day" }
-  > {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  ): Promise<SuggestPlanDayNutrientsDTO> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const link = await suggestPlanRepository.findDailyPlanLink(
       suggestPlanId,
       dayIndex,
     );
-    if (!link) return { ok: false, reason: "invalid_day" };
+    if (!link) {
+      throw appError("Ngày không tồn tại trong thực đơn này.", 400);
+    }
 
     const planWithMeals = await dailyPlanRepository.findByIdWithMeals(
       link.daily_plan_id,
     );
-    if (!planWithMeals) return { ok: false, reason: "invalid_day" };
+    if (!planWithMeals) {
+      throw appError("Ngày không tồn tại trong thực đơn này.", 400);
+    }
 
     const catalog = await dailyPlanRepository.findAllNutrients();
     const mealTotalsList: NutrientValueDTO[][] = [];
@@ -365,15 +330,13 @@ export const suggestPlanService = {
     }));
 
     return {
-      ok: true,
-      data: {
-        dayIndex,
-        dailyPlanId: link.daily_plan_id,
-        totals,
-      },
+      dayIndex,
+      dailyPlanId: link.daily_plan_id,
+      totals,
     };
   },
 
+  // Tạo gói mới, mặc định 1 ngày trống
   async create(
     adminUserId: number,
     name?: string,
@@ -387,38 +350,30 @@ export const suggestPlanService = {
     return { suggestPlanId };
   },
 
-  async getDetail(
-    suggestPlanId: number,
-    adminUserId: number,
-  ): Promise<
-    | { ok: true; plan: SuggestPlanDetailDTO }
-    | { ok: false; reason: "not_found" }
-  > {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  // Chi tiết 1 gói, gồm mọi ngày
+  async getDetail(suggestPlanId: number): Promise<SuggestPlanDetailDTO> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
-    if (!plan) return { ok: false, reason: "not_found" };
+    if (!plan) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
-    return { ok: true, plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays) };
+    return toSuggestPlanDetail(plan as RawSuggestPlanWithDays);
   },
 
+  // Sửa tên/ mô tả/ ảnh gói
   async updateMetadata(
     suggestPlanId: number,
-    adminUserId: number,
     body: UpdateSuggestPlanBodyDTO,
-  ): Promise<
-    | { ok: true; plan: SuggestPlanDetailDTO; oldImageUrl: string | null }
-    | { ok: false; reason: "not_found" }
-  > {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  ): Promise<{ plan: SuggestPlanDetailDTO; oldImageUrl: string | null }> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     await suggestPlanRepository.updateMetadata(suggestPlanId, {
       ...(body.name !== undefined ? { name: body.name } : {}),
@@ -429,85 +384,84 @@ export const suggestPlanService = {
     });
 
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
-    if (!plan) return { ok: false, reason: "not_found" };
+    if (!plan) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
-    return { ok: true, plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays), oldImageUrl: owned.image_url,};  
+    return {
+      plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays),
+      oldImageUrl: owned.image_url,
+    };
   },
 
-  async remove(
-    suggestPlanId: number,
-    adminUserId: number,
-  ): Promise<{ ok: true } | { ok: false; reason: "not_found" }> {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  // Xóa 1 gói gợi ý
+  async remove(suggestPlanId: number): Promise<void> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     await suggestPlanRepository.deleteById(suggestPlanId);
-    return { ok: true };
   },
 
+  // Bật/tắt công khai gói, chặn nếu chưa đủ ngày
   async publish(
     suggestPlanId: number,
-    adminUserId: number,
     isPublic: boolean,
-  ): Promise<
-    | { ok: true; result: PublishSuggestPlanResponseDTO }
-    | { ok: false; reason: "not_found" | "incomplete" }
-  > {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  ): Promise<PublishSuggestPlanResponseDTO> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
-    if (!plan) return { ok: false, reason: "not_found" };
+    if (!plan) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const detail = toSuggestPlanDetail(plan as RawSuggestPlanWithDays);
     if (isPublic && !detail.canPublish) {
-      return { ok: false, reason: "incomplete" };
+      throw appError("Chưa đủ ngày hoàn chỉnh để công khai.", 400);
     }
 
     await suggestPlanRepository.setPublic(suggestPlanId, isPublic);
 
     return {
-      ok: true,
-      result: {
-        suggestPlanId,
-        isPublic,
-        canPublish: detail.canPublish,
-      },
+      suggestPlanId,
+      isPublic,
+      canPublish: detail.canPublish,
     };
   },
 
+  // Thêm 1 ngày trống vào cuối gói
   async addDay(
     suggestPlanId: number,
     adminUserId: number,
-  ): Promise<
-    | { ok: true; result: AddSuggestPlanDayResponseDTO }
-    | { ok: false; reason: "not_found" | "max_days" }
-  > {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  ): Promise<AddSuggestPlanDayResponseDTO> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const added = await suggestPlanRepository.addEmptyDay(
       suggestPlanId,
       adminUserId,
     );
-    if (!added) return { ok: false, reason: "max_days" };
+    if (!added) {
+      throw appError("Đã đạt tối đa 14 ngày.", 400);
+    }
 
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
-    if (!plan) return { ok: false, reason: "not_found" };
+    if (!plan) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const dayRow = plan.suggest_plan_days.find(
       (d) => d.day_index === added.dayIndex,
     );
-    if (!dayRow) return { ok: false, reason: "not_found" };
+    if (!dayRow) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const day = toSuggestPlanDay(
       dayRow.day_index,
@@ -516,29 +470,22 @@ export const suggestPlanService = {
     );
 
     return {
-      ok: true,
-      result: {
-        dayIndex: added.dayIndex,
-        dailyPlanId: added.dailyPlanId,
-        dayCount: added.dayCount,
-        day,
-      },
+      dayIndex: added.dayIndex,
+      dailyPlanId: added.dailyPlanId,
+      dayCount: added.dayCount,
+      day,
     };
   },
 
+  // Xóa 1 ngày khỏi gói, re-index các ngày sau
   async removeDay(
     suggestPlanId: number,
-    adminUserId: number,
     dayIndex: number,
-  ): Promise<
-    | { ok: true; result: RemoveSuggestPlanDayResponseDTO }
-    | { ok: false; reason: "not_found" | "min_days" | "invalid_day" }
-  > {
-    const owned = await suggestPlanRepository.findOwnedByAdmin(
-      suggestPlanId,
-      adminUserId,
-    );
-    if (!owned) return { ok: false, reason: "not_found" };
+  ): Promise<RemoveSuggestPlanDayResponseDTO> {
+    const owned = await suggestPlanRepository.findTemplatePlan(suggestPlanId);
+    if (!owned) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     const removed = await suggestPlanRepository.removeDayAtIndex(
       suggestPlanId,
@@ -547,28 +494,30 @@ export const suggestPlanService = {
 
     if (!removed.ok) {
       if (removed.reason === "min_days") {
-        return { ok: false, reason: "min_days" };
+        throw appError("Phải giữ ít nhất 1 ngày.", 400);
       }
       if (removed.reason === "invalid_day") {
-        return { ok: false, reason: "invalid_day" };
+        throw appError("Ngày không tồn tại trong thực đơn này.", 400);
       }
-      return { ok: false, reason: "not_found" };
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
     }
 
     await suggestPlanService.revalidatePublicStatus(suggestPlanId);
 
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
-    if (!plan) return { ok: false, reason: "not_found" };
+    if (!plan) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
 
     return {
-      ok: true,
-      result: {
-        dayCount: removed.dayCount,
-        deletedDayIndex: removed.deletedDayIndex,
-        plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays),
-      },
+      dayCount: removed.dayCount,
+      deletedDayIndex: removed.deletedDayIndex,
+      plan: toSuggestPlanDetail(plan as RawSuggestPlanWithDays),
     };
-  },  async revalidatePublicStatus(suggestPlanId: number): Promise<void> {
+  },
+
+  // Tự ẩn gói nếu sửa/xóa làm nó không còn đủ điều kiện
+  async revalidatePublicStatus(suggestPlanId: number): Promise<void> {
     const plan = await suggestPlanRepository.findByIdWithDays(suggestPlanId);
     if (!plan || !plan.is_public) return;
 
@@ -576,5 +525,55 @@ export const suggestPlanService = {
     if (!detail.canPublish) {
       await suggestPlanRepository.setPublic(suggestPlanId, false);
     }
+  },
+
+  // ===== Public: user xem gói đang công khai =====
+
+  // Danh sách gói công khai: tìm kiếm + phân trang
+  async listPublic(
+    search: string,
+    page: number,
+    pageSize: number,
+    sort: "created_desc" | "created_asc" = "created_desc",
+  ): Promise<SuggestPlanPublicListResponseDTO> {
+    const skip = (page - 1) * pageSize;
+    const [rows, total] = await Promise.all([
+      suggestPlanRepository.listPublic(search, skip, pageSize, sort),
+      suggestPlanRepository.countPublic(search),
+    ]);
+
+    return {
+      items: rows.map(toPublicSuggestPlanListItem),
+      total,
+      page,
+      pageSize,
+    };
+  },
+
+  // Chi tiết 1 gói công khai cho user xem
+  async getPublicDetail(
+    suggestPlanId: number,
+  ): Promise<SuggestPlanPublicDetailDTO> {
+    const plan = await suggestPlanRepository.findPublicByIdWithDays(suggestPlanId);
+    if (!plan) {
+      throw appError("Không tìm thấy thực đơn gợi ý.", 404);
+    }
+
+    return toPublicSuggestPlanDetail(plan as RawSuggestPlanWithDays);
+  },
+
+  // Dinh dưỡng 1 bữa trong gói công khai
+  async getPublicMealNutrients(
+    mealId: number,
+  ): Promise<MealNutrientsDTO | null> {
+    const allowed =
+      await suggestPlanRepository.isMealInPublicSuggestPlan(mealId);
+    if (!allowed) return null;
+
+    const meal = await dailyPlanRepository.findMealWithNutrients(mealId);
+    if (!meal) return null;
+
+    const catalog = await dailyPlanRepository.findAllNutrients();
+    return toMealNutrients(meal, catalog);
   },
 };

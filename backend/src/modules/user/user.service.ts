@@ -8,6 +8,7 @@ import type {
 import type { UpdateBasicInfoDTO } from "./user.validation";
 import type { User } from "../../../prisma/generated/prisma/client";
 import bcrypt from "bcrypt";
+import { appError } from "../../utils/http.util";
 
 // Các field hồ sơ cơ thể cần để tính TDEE.
 type TdeeInput = Pick<
@@ -16,41 +17,25 @@ type TdeeInput = Pick<
 >;
 
 export const userService = {
-  async listForAdmin(search: string, page: number, pageSize: number) {
-    const skip = (page - 1) * pageSize;
-    const [items, total] = await Promise.all([
-      userRepository.listForAdmin(search, skip, pageSize),
-      userRepository.countForAdmin(search),
-    ]);
-    return { items, total, page, pageSize };
+  // ===== User: hồ sơ, mật khẩu, dinh dưỡng theo dõi, avatar =====
+
+  // Lấy hồ sơ của chính mình
+  async getMyProfile(userId: number) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw appError("User not found", 404);
+
+    // TDEE đã được lưu sẵn trên user (cập nhật khi updateBasicInfo) -> trả thẳng
+    return {
+      user,
+    };
   },
 
-  async getUserByIdForAdmin(userId: number) {
-    return userRepository.findByIdForAdmin(userId);
-  },
-
+  // Lấy user theo id (dùng nội bộ, vd trước khi đổi avatar)
   async getUserById(userId: number) {
     return userRepository.findById(userId);
   },
 
-  async createUser(data: CreateUserDTO) {
-    const existingUser = await userRepository.findByEmail(data.email);
-    if (existingUser) {
-      throw new Error("Email already exists");
-    }
-
-    const hashedPassword = await bcrypt.hash(data.password, 10);
-
-    return userRepository.create({
-      ...data,
-      password: hashedPassword,
-    });
-  },
-
-  async remove(userId: number) {
-    return userRepository.delete(userId);
-  },
-
+  // Công thức tính TDEE từ hồ sơ
   calculateTdee(user: TdeeInput) {
     if (!user.dob || !user.height || !user.weight || !user.gender || !user.activity_level || !user.goal) {
       return null;
@@ -78,7 +63,7 @@ export const userService = {
     return { tdee };
   },
 
-
+  // Cập nhật hồ sơ cơ thể, tự tính lại TDEE
   async updateBasicInfo(userId: number, data: UpdateBasicInfoDTO) {
     const dob = new Date(data.dob);
 
@@ -100,34 +85,27 @@ export const userService = {
     };
   },
 
-  async getMyProfile(userId: number) {
-    const user = await userRepository.findById(userId);
-    if (!user) throw new Error("User not found");
-
-    // TDEE đã được lưu sẵn trên user (cập nhật khi updateBasicInfo) → trả thẳng, không tính lại.
-    return {
-      user,
-    };
-  },
-
+  // Đổi mật khẩu, kiểm mật khẩu hiện tại trước
   async changePassword(userId: number, data: ChangePasswordDTO) {
     const user = await userRepository.findByIdWithPassword(userId);
-    if (!user) throw new Error("User not found");
+    if (!user) throw appError("User not found", 404);
 
     const isMatch = await bcrypt.compare(data.current_password, user.password);
-    if (!isMatch) throw new Error("Mật khẩu hiện tại không chính xác");
+    if (!isMatch) throw appError("Mật khẩu hiện tại không chính xác", 400);
 
     const hashedPassword = await bcrypt.hash(data.new_password, 10);
     return userRepository.update(userId, { password: hashedPassword });
   },
 
+  // Cập nhật ảnh đại diện
   async updateAvatar(userId: number, avatar_url: string) {
     const user = await userRepository.findById(userId);
-    if (!user) throw new Error("User not found");
+    if (!user) throw appError("User not found", 404);
 
     return userRepository.update(userId, { avatar_url });
   },
 
+  // Lấy danh sách chất dinh dưỡng đang theo dõi
   async getTrackedNutrients(
     userId: number,
   ): Promise<TrackedNutrientsResponseDTO> {
@@ -142,6 +120,7 @@ export const userService = {
     };
   },
 
+  // Cập nhật danh sách chất dinh dưỡng theo dõi
   async updateTrackedNutrients(
     userId: number,
     body: UpdateTrackedNutrientsBodyDTO,
@@ -150,14 +129,51 @@ export const userService = {
     const nutrients = await userRepository.findNutrientsByIds(ids);
 
     if (nutrients.length !== ids.length) {
-      throw new Error("Có chất dinh dưỡng không tồn tại");
+      throw appError("Có chất dinh dưỡng không tồn tại", 400);
     }
 
     if (nutrients.some((n) => n.is_macro)) {
-      throw new Error("Không thể theo dõi chất macro hệ thống");
+      throw appError("Không thể theo dõi chất macro hệ thống", 400);
     }
 
     await userRepository.replaceTrackedNutrients(userId, body.slots);
     return this.getTrackedNutrients(userId);
+  },
+
+  // ===== Admin: quản lý user khác =====
+
+  // Danh sách user cho admin, có tìm kiếm + phân trang
+  async listForAdmin(search: string, page: number, pageSize: number) {
+    const skip = (page - 1) * pageSize;
+    const [items, total] = await Promise.all([
+      userRepository.listForAdmin(search, skip, pageSize),
+      userRepository.countForAdmin(search),
+    ]);
+    return { items, total, page, pageSize };
+  },
+
+  // Xem chi tiết 1 user cho admin
+  async getUserByIdForAdmin(userId: number) {
+    return userRepository.findByIdForAdmin(userId);
+  },
+
+  // Tạo user mới
+  async createUser(data: CreateUserDTO) {
+    const existingUser = await userRepository.findByEmail(data.email);
+    if (existingUser) {
+      throw appError("Email already exists", 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+
+    return userRepository.create({
+      ...data,
+      password: hashedPassword,
+    });
+  },
+
+  // Xóa user
+  async remove(userId: number) {
+    return userRepository.delete(userId);
   },
 };

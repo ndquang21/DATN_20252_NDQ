@@ -7,9 +7,11 @@ import {
   Save,
   Lock,
   Mail,
-  Camera, // Thêm icon Camera để làm nút upload
+  Camera, 
 } from "lucide-react";
+
 import { useAuth } from "../../contexts/AuthContext";
+
 import {
   userService,
   type ActivityLevel,
@@ -17,6 +19,7 @@ import {
   type Goal,
   type UpdateBasicInfoPayload,
 } from "../../services/user.service";
+
 import { DEFAULT_AVATAR_URL } from "../../constants/default-images";
 import { parseApiError } from "../../utils/error.util";
 
@@ -80,7 +83,10 @@ export default function UserProfile() {
     };
 
     fetchInitialData();
-  }, []);  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  }, []);
+
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -94,7 +100,8 @@ export default function UserProfile() {
     setUploadingAvatar(true);
 
     try {
-      const response = await userService.updateAvatar(file);      setProfile((prev) => ({
+      const response = await userService.updateAvatar(file);
+      setProfile((prev) => ({
         ...prev,
         avatar_url: response.data.avatar_url,
       }));
@@ -116,6 +123,7 @@ export default function UserProfile() {
       setUploadingAvatar(false);
     }
   };
+
 
   const handleSaveMetrics = async () => {
     if (
@@ -144,6 +152,7 @@ export default function UserProfile() {
       setSavingMetrics(false);
     }
   };
+
 
   const handleSavePassword = async () => {
     if (
@@ -182,6 +191,7 @@ export default function UserProfile() {
     }
   };
 
+
   if (initialLoading) {
     return (
       <div className="flex justify-center items-center h-[50vh]">
@@ -189,6 +199,7 @@ export default function UserProfile() {
       </div>
     );
   }
+
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-2 py-8 lg:py-12 mb-12 space-y-8">
@@ -219,10 +230,12 @@ export default function UserProfile() {
                 className="w-24 h-24 rounded-full object-cover border-2 border-slate-200 group-hover:opacity-80 transition-all shadow-sm"
               />
 
-              {uploadingAvatar ? (                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center">
+              {uploadingAvatar ? (
+                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center">
                   <Loader2 className="w-6 h-6 text-white animate-spin" />
                 </div>
-              ) : (                <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+              ) : (
+                <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                   <Camera className="w-6 h-6" />
                   <input
                     type="file"
@@ -465,9 +478,7 @@ export default function UserProfile() {
                 <option value="light">Vận động nhẹ (1-3 ngày/tuần)</option>
                 <option value="moderate">Vận động vừa (3-5 ngày/tuần)</option>
                 <option value="active">Năng động (6-7 ngày/tuần)</option>
-                <option value="very_active">
-                  Rất năng động (VĐV, LĐ nặng)
-                </option>
+                <option value="very_active">Rất năng động (VĐV, LĐ nặng)</option>
               </select>
             </div>
 

@@ -9,6 +9,7 @@ export type AuthUser = {
   avatar_url?: string
 };
 
+// Data trả về khi Đăng nhập/Đăng ký thành công
 export type AuthResponse = {
   token: string;
   refreshToken: string;
@@ -26,73 +27,49 @@ type RegisterPayload = {
   username: string;
 };
 
+// Data trả về khi đổi Access Token
 type RefreshResponse = {
   token: string;
 };
 
-type CurrentUserResponse = {
-  user: {
-    user_id: number;
-    email: string;
-    username: string;
-    role: string;
-    avatar_url: string,
-    gender: string | null;
-    dob: string | null;
-    height: number | null;
-    weight: number | null;
-    activity_level: string | null;
-    TDEE: number | null;
-    goal: string | null;
-  };
-};
-
+// Bỏ qua làm mới
 const authRequestConfig: AxiosRequestConfig = {
   skipAuthRefresh: true,
 };
 
 export const authService = {
+  // Đăng nhập
   login(payload: LoginPayload) {
     return api.post<AuthResponse>("/auth/login", payload, authRequestConfig);
   },
 
+  // Đăng ký
   register(payload: RegisterPayload) {
     return api.post<AuthResponse>("/auth/register", payload, authRequestConfig);
   },
 
+  // Refresh
   refresh(refreshToken: string) {
-    return api.post<RefreshResponse>(
-      "/auth/refresh",
-      { refreshToken },
-      authRequestConfig,
-    );
+    return api.post<RefreshResponse>("/auth/refresh", { refreshToken }, authRequestConfig);
   },
 
-  me() {
-    return api.get<CurrentUserResponse>("/users/me");
-  },
-
+  
+  // Đăng xuất
   logout(refreshToken: string) {
     return api.post("/auth/logout", { refreshToken }, authRequestConfig);
   },
 
+  // Quên mật khẩu
   forgotPassword(email: string) {
-    return api.post<{ message: string }>(
-      "/auth/forgot-password",
-      { email },
-      authRequestConfig,
-    );
+    return api.post<{ message: string }>("/auth/forgot-password", { email }, authRequestConfig);
   },
 
+  // Reset mật khẩu
   resetPassword(payload: {
     token: string;
     newPassword: string;
     confirmPassword: string;
   }) {
-    return api.post<{ message: string }>(
-      "/auth/reset-password",
-      payload,
-      authRequestConfig,
-    );
+    return api.post<{ message: string }>( "/auth/reset-password", payload, authRequestConfig);
   },
 };

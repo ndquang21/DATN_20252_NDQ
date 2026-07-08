@@ -15,6 +15,7 @@ export default function RoleRoute({ allowedRoles, children }: RoleRouteProps) {
     return <Navigate to="/" replace />;
   }
 
+  // Kiểm tra danh sách quyền
   if (!user || !user.role || !allowedRoles.includes(user.role)) {
     return <Navigate to="/home" replace />;
   }

@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { MAX_SUGGEST_PLAN_DAYS } from "../../constants/suggest-plan";
 
+// ===== Admin: quản lý gói gợi ý =====
+
+// Thứ tự sắp xếp danh sách gói (cho admin)
 export const suggestPlanListSortSchema = z.enum([
   "created_desc",
   "created_asc",
@@ -8,6 +11,7 @@ export const suggestPlanListSortSchema = z.enum([
   "hidden_first",
 ]);
 
+// Query danh sách gói: tìm kiếm + phân trang + sắp xếp
 export const listSuggestPlansQuerySchema = z.object({
   search: z.string().trim().max(100).optional().default(""),
   page: z.coerce.number().int().min(1).default(1),
@@ -15,15 +19,18 @@ export const listSuggestPlansQuerySchema = z.object({
   sort: suggestPlanListSortSchema.optional().default("created_desc"),
 });
 
+// Param :id của 1 gói gợi ý
 export const suggestPlanIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+// Param :id + :dayIndex (1 ngày cụ thể trong gói)
 export const suggestPlanDayParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
   dayIndex: z.coerce.number().int().min(1).max(MAX_SUGGEST_PLAN_DAYS),
 });
 
+// Body tạo gói mới: tên + số ngày ban đầu
 export const createSuggestPlanBodySchema = z.object({
   name: z
     .string()
@@ -39,6 +46,7 @@ export const createSuggestPlanBodySchema = z.object({
     .optional(),
 });
 
+// Body sửa tên/mô tả/ảnh, cần ít nhất 1 trường
 export const updateSuggestPlanBodySchema = z
   .object({
     name: z
@@ -68,14 +76,20 @@ export const updateSuggestPlanBodySchema = z
     { message: "Cần ít nhất một trường để cập nhật" },
   );
 
+// Body bật/tắt công khai gói
 export const publishSuggestPlanBodySchema = z.object({
   isPublic: z.boolean(),
 });
+
+// ===== Public: user xem gói đang công khai =====
+
+// Thứ tự sắp xếp danh sách gói công khai (ít lựa chọn hơn bản admin)
 export const publicSuggestPlanListSortSchema = z.enum([
   "created_desc",
   "created_asc",
 ]);
 
+// Query danh sách gói công khai: tìm kiếm + phân trang + sắp xếp
 export const listPublicSuggestPlansQuerySchema = z.object({
   search: z.string().trim().max(100).optional().default(""),
   page: z.coerce.number().int().min(1).default(1),
@@ -83,12 +97,17 @@ export const listPublicSuggestPlansQuerySchema = z.object({
   sort: publicSuggestPlanListSortSchema.optional().default("created_desc"),
 });
 
+// Param :mealId (xem dinh dưỡng 1 bữa trong gói công khai)
 export const suggestPlanMealIdParamSchema = z.object({
   mealId: z.coerce.number().int().positive(),
 });
 
+// ===== Apply: áp dụng gói vào ngày thật của user =====
+
+// Chuỗi ngày dạng YYYY-MM-DD, dùng chung cho các schema apply
 const dateStrSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày YYYY-MM-DD");
 
+// Loại bữa hợp lệ khi áp dụng theo scope "meal"
 export const applyMealTypeSchema = z.enum([
   "breakfast",
   "lunch",
@@ -96,6 +115,7 @@ export const applyMealTypeSchema = z.enum([
   "snack",
 ]);
 
+// Body áp dụng gói: rẽ nhánh theo "scope" (cả gói / 1 ngày / 1 bữa)
 export const applySuggestPlanBodySchema = z.discriminatedUnion("scope", [
   z.object({
     scope: z.literal("plan"),

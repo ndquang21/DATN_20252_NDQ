@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { sendServerError } from "../../utils/http.util";
+import { sendError } from "../../utils/http.util";
 import { dishService } from "./dish.service";
 import {
   createDishBodySchema,
@@ -11,12 +11,25 @@ import {
 import { updateDishBodySchema } from "./dish.validation";
 import { destroyCloudinaryImage } from "../../config/cloudinary";
 
+// Chuyển dishId từ chuỗi URL (req.params.dishId) sang số, trả null nếu không hợp lệ
 function parseDishId(raw: string): number | null {
   const id = parseInt(raw, 10);
   return Number.isNaN(id) ? null : id;
 }
 
+// Lấy URL ảnh vừa upload từ request; không có ảnh mới thì trả undefined
+function getUploadedImageUrl(req: Request): string | undefined {
+  if (!req.file) {
+    return undefined;
+  }
+  if (!("path" in req.file)) {
+    return undefined;
+  }
+  return req.file.path as string;
+}
+
 export const dishController = {
+  // Tìm kiếm  (user tìm cả món hệ thống lẫn món riêng)
   async search(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -40,10 +53,12 @@ export const dishController = {
       );
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // Danh sách món cá nhân của user
   async listMyDishes(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -66,10 +81,12 @@ export const dishController = {
       );
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  //Tạo món cá nhân
   async createMyDish(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -84,33 +101,23 @@ export const dishController = {
         });
       }
 
-      const imageUrl =
-        req.file && "path" in req.file ? (req.file.path as string) : undefined;
+      const imageUrl = getUploadedImageUrl(req);
 
-      const result = await dishService.createMyDish(
+      const dish = await dishService.createMyDish(
         req.user.userId,
         parsed.data.name,
         parsed.data.nutrients,
         imageUrl,
       );
 
-      if (!result.ok) {
-        if (result.reason === "duplicate_name") {
-          return res.status(409).json({
-            error: "Bạn đã có món trùng tên. Vui lòng đặt tên khác.",
-          });
-        }
-        return res.status(400).json({
-          error: "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
-        });
-      }
-
-      return res.status(201).json(result.dish);
+      return res.status(201).json(dish);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // Xem chi tiết 1 món cá nhân
   async getMyDishById(req: Request<{ dishId: string }>, res: Response) {
     try {
       if (!req.user) {
@@ -129,10 +136,12 @@ export const dishController = {
 
       return res.json(dish);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // Sửa món cá nhân
   async updateMyDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       if (!req.user) {
@@ -152,8 +161,7 @@ export const dishController = {
         });
       }
 
-      const newImageUrl =
-        req.file && "path" in req.file ? (req.file.path as string) : undefined;
+      const newImageUrl = getUploadedImageUrl(req);
 
       const result = await dishService.updateMyDish(
         req.user.userId,
@@ -162,20 +170,6 @@ export const dishController = {
         parsed.data.nutrients,
         newImageUrl,
       );
-
-      if (!result.ok) {
-        if (result.reason === "not_found") {
-          return res.status(404).json({ error: "Không tìm thấy món của bạn" });
-        }
-        if (result.reason === "duplicate_name") {
-          return res.status(409).json({
-            error: "Bạn đã có món trùng tên. Vui lòng đặt tên khác.",
-          });
-        }
-        return res.status(400).json({
-          error: "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
-        });
-      }
 
       if (
         newImageUrl &&
@@ -187,10 +181,12 @@ export const dishController = {
 
       return res.json(result.dish);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // Xóa món cá nhân
   async removeMyDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       if (!req.user) {
@@ -203,17 +199,16 @@ export const dishController = {
       }
 
       const result = await dishService.removeMyDish(req.user.userId, dishId);
-      if (!result.ok) {
-        return res.status(404).json({ error: "Không tìm thấy món của bạn" });
-      }
-
       await destroyCloudinaryImage(result.imageUrl);
 
       return res.json({ message: "Đã xóa món thành công" });
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
+
+
+  // (Admin) danh sách món hệ thống
   async listGlobalDishes(req: Request, res: Response) {
     try {
       const parsed = adminGlobalDishesQuerySchema.safeParse(req.query);
@@ -232,10 +227,12 @@ export const dishController = {
       );
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // (Admin) xem chi tiết món hệ thống
   async getGlobalDishById(req: Request<{ dishId: string }>, res: Response) {
     try {
       const dishId = parseDishId(req.params.dishId);
@@ -250,10 +247,12 @@ export const dishController = {
 
       return res.json(dish);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // (Admin) tạo món hệ thống
   async createGlobalDish(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -268,33 +267,23 @@ export const dishController = {
         });
       }
 
-      const imageUrl =
-        req.file && "path" in req.file ? (req.file.path as string) : undefined;
+      const imageUrl = getUploadedImageUrl(req);
 
-      const result = await dishService.createGlobalDish(
+      const dish = await dishService.createGlobalDish(
         req.user.userId,
         parsed.data.name,
         parsed.data.nutrients,
         imageUrl,
       );
 
-      if (!result.ok) {
-        if (result.reason === "duplicate_name") {
-          return res.status(409).json({
-            error: "Đã có món hệ thống trùng tên. Vui lòng đặt tên khác.",
-          });
-        }
-        return res.status(400).json({
-          error: "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
-        });
-      }
-
-      return res.status(201).json(result.dish);
+      return res.status(201).json(dish);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // (Admin) sửa món hệ thống
   async updateGlobalDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       const dishId = parseDishId(req.params.dishId);
@@ -310,8 +299,7 @@ export const dishController = {
         });
       }
 
-      const newImageUrl =
-        req.file && "path" in req.file ? (req.file.path as string) : undefined;
+      const newImageUrl = getUploadedImageUrl(req);
 
       const result = await dishService.updateGlobalDish(
         dishId,
@@ -319,20 +307,6 @@ export const dishController = {
         parsed.data.nutrients,
         newImageUrl,
       );
-
-      if (!result.ok) {
-        if (result.reason === "not_found") {
-          return res.status(404).json({ error: "Không tìm thấy món hệ thống" });
-        }
-        if (result.reason === "duplicate_name") {
-          return res.status(409).json({
-            error: "Đã có món hệ thống trùng tên. Vui lòng đặt tên khác.",
-          });
-        }
-        return res.status(400).json({
-          error: "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
-        });
-      }
 
       if (
         newImageUrl &&
@@ -344,10 +318,12 @@ export const dishController = {
 
       return res.json(result.dish);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+
+  // (Admin) xóa món hệ thống
   async removeGlobalDish(req: Request<{ dishId: string }>, res: Response) {
     try {
       const dishId = parseDishId(req.params.dishId);
@@ -356,15 +332,11 @@ export const dishController = {
       }
 
       const result = await dishService.removeGlobalDish(dishId);
-      if (!result.ok) {
-        return res.status(404).json({ error: "Không tìm thấy món hệ thống" });
-      }
-
       await destroyCloudinaryImage(result.imageUrl);
 
       return res.json({ message: "Đã xóa món hệ thống thành công" });
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 };

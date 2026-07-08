@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { sendServerError } from "../../utils/http.util";
+import { sendError } from "../../utils/http.util";
 import { userService } from "./user.service";
 import {
   createUserSchema,
@@ -10,42 +10,9 @@ import {
 import { destroyCloudinaryImage } from "../../config/cloudinary";
 
 export const userController = {
-  async listUsers(req: Request, res: Response) {
-    try {
-      const parsed = listUsersQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        return res.status(400).json({
-          error: "Query không hợp lệ",
-          details: parsed.error.issues,
-        });
-      }
+  // ===== User: hồ sơ, mật khẩu, dinh dưỡng theo dõi, avatar =====
 
-      const { search, page, pageSize } = parsed.data;
-      const result = await userService.listForAdmin(search, page, pageSize);
-      return res.json(result);
-    } catch (error) {
-      return sendServerError(res, error);
-    }
-  },
-
-  async getUserById(req: Request<{ id: string }>, res: Response) {
-    try {
-      const userId = parseInt(req.params.id, 10);
-      if (Number.isNaN(userId)) {
-        return res.status(400).json({ error: "Invalid id" });
-      }
-
-      const user = await userService.getUserByIdForAdmin(userId);
-      if (!user) {
-        return res.status(404).json({ error: "Không tìm thấy user." });
-      }
-
-      return res.json(user);
-    } catch (error) {
-      return sendServerError(res, error);
-    }
-  },
-
+  // Lấy hồ sơ của chính mình
   async getMe(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -55,10 +22,11 @@ export const userController = {
       const profile = await userService.getMyProfile(req.user.userId);
       return res.json(profile);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Cập nhật hồ sơ cơ thể, tự tính lại TDEE
   async updateBasicInfo(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -78,14 +46,12 @@ export const userController = {
         parseResult.data,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(400).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // Đổi mật khẩu, yêu cầu mật khẩu hiện tại
   async changePassword(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -104,14 +70,12 @@ export const userController = {
 
       await userService.changePassword(req.user.userId, req.body);
       return res.json({ message: "Đổi mật khẩu thành công" });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(400).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // Lấy danh sách chất dinh dưỡng đang theo dõi
   async getTrackedNutrients(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -121,10 +85,11 @@ export const userController = {
       const result = await userService.getTrackedNutrients(req.user.userId);
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Cập nhật danh sách chất dinh dưỡng theo dõi
   async updateTrackedNutrients(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -144,14 +109,12 @@ export const userController = {
         parsed.data,
       );
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(400).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // Upload ảnh đại diện mới, xóa ảnh cũ
   async uploadAvatar(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -177,14 +140,52 @@ export const userController = {
         message: "Cập nhật ảnh đại diện thành công",
         avatar_url: updatedUser.avatar_url,
       });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(400).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // ===== Admin: quản lý user khác =====
+
+  // Danh sách user, có tìm kiếm + phân trang
+  async listUsers(req: Request, res: Response) {
+    try {
+      const parsed = listUsersQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Query không hợp lệ",
+          details: parsed.error.issues,
+        });
+      }
+
+      const { search, page, pageSize } = parsed.data;
+      const result = await userService.listForAdmin(search, page, pageSize);
+      return res.json(result);
+    } catch (error) {
+      return sendError(res, error);
+    }
+  },
+
+  // Xem chi tiết 1 user theo id
+  async getUserById(req: Request<{ id: string }>, res: Response) {
+    try {
+      const userId = parseInt(req.params.id, 10);
+      if (Number.isNaN(userId)) {
+        return res.status(400).json({ error: "Invalid id" });
+      }
+
+      const user = await userService.getUserByIdForAdmin(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Không tìm thấy user." });
+      }
+
+      return res.json(user);
+    } catch (error) {
+      return sendError(res, error);
+    }
+  },
+
+  // Tạo user mới
   async createUser(req: Request, res: Response) {
     try {
       const parseResult = createUserSchema.safeParse(req.body);
@@ -197,14 +198,12 @@ export const userController = {
 
       const user = await userService.createUser(parseResult.data);
       return res.status(201).json(user);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return res.status(400).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // Xóa user theo id
   async remove(req: Request<{ id: string }>, res: Response) {
     try {
       const userId = parseInt(req.params.id, 10);
@@ -215,7 +214,7 @@ export const userController = {
       const deleted = await userService.remove(userId);
       return res.json(deleted);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 };

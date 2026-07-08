@@ -14,8 +14,6 @@ export type DishSearchResponseDTO = {
   pageSize: number;
 };
 
-// Tóm tắt 1 món + macro/100g. Dùng chung cho: list món cá nhân, list món global
-// (admin), kết quả create/update. Không riêng "món của tôi" hay "response create".
 export type DishSummaryDTO = {
   dishId: number;
   name: string;
@@ -45,7 +43,9 @@ export type DishDetailDTO = {
   name: string;
   imageUrl: string | null;
   nutrients: MyDishNutrientDTO[];
-};export type AdminGlobalDishListItemDTO = DishSummaryDTO;
+};
+
+export type AdminGlobalDishListItemDTO = DishSummaryDTO;
 
 export type AdminGlobalDishListResponseDTO = {
   items: AdminGlobalDishListItemDTO[];

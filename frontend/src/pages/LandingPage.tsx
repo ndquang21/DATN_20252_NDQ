@@ -23,8 +23,7 @@ export default function LandingPage() {
                 Anthelme Brillat-Savarin
               </span>
               <p className="text-lg md:text-xl text-gray-600 max-w-xl mx-auto md:mx-0">
-                Khám phá chế độ dinh dưỡng được cá nhân hóa dựa trên dữ liệu
-                khoa học, giúp bạn đạt được mục tiêu sức khỏe một cách bền vững.
+                Theo dõi dinh dưỡng một cách khoa học, giúp bạn đạt được mục tiêu sức khỏe một cách bền vững.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start pt-4">
@@ -74,7 +73,7 @@ export default function LandingPage() {
               Công nghệ hỗ trợ sức khỏe
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Giải pháp thiết lập thực đơn dựa trên thể trạng cá
+              Hỗ trợ theo dõi dinh dưỡng dựa trên thể trạng cá
               nhân, giúp bạn dễ dàng duy trì lối sống lành mạnh mà không tốn
               thời gian.
             </p>
@@ -89,7 +88,7 @@ export default function LandingPage() {
                 Gợi ý thực đơn
               </h3>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Hệ thống thực đơn được thiết kế riêng đa dạng và phù hợp với nhu
+                Hệ thống thực đơn được thiết kế đa dạng và phù hợp với nhu
                 cầu dinh dưỡng của bạn.
               </p>
             </div>

@@ -21,28 +21,39 @@ export const MEAL_ORDER: Record<string, number> = {
   snack: 3,
 };
 
+
 // Làm tròn 1 chữ số thập phân.
 export function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
+
 
 // Làm tròn 2 chữ số thập phân.
 export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+
 // Khởi tạo tổng dinh dưỡng bằng 0.
 export function emptyTotals(): NutrientTotalsDTO {
   return { calories: 0, protein: 0, carb: 0, fat: 0 };
 }
 
-// Chọn ảnh bìa cho một bữa: ưu tiên món có ảnh thật, lấy món calo cao nhất.
+
+// Chọn ảnh cho một bữa: ưu tiên món có ảnh thật, lấy món calo cao nhất.
 export function pickCoverImage(dishes: DishItemDTO[]): string {
+  // Nếu danh sách rỗng, trả ảnh mặc định của hệ thống
   if (dishes.length === 0) return DEFAULT_DISH_IMAGE_URL;
+
+  // Giữ lại các món có ảnh thực tế và không chứa từ khóa mặc định
   const nonDefault = dishes.filter(
     (d) => d.imageUrl && !d.imageUrl.includes("default_dish"),
   );
+
+  // Xác định tập hợp dữ liệu dùng cho bước so sánh kế tiếp
   const pool = nonDefault.length > 0 ? nonDefault : dishes;
+
+  // Duyệt mảng để tìm ra món có hàm lượng calo lớn nhất
   const cover = pool.reduce(
     (best, d) => (d.calories > best.calories ? d : best),
     pool[0],
@@ -76,58 +87,83 @@ export function buildMealsAndSummary(dailyMenus: DailyMenuRow[]): {
   meals: MealItemDTO[];
   summary: DailyPlanSummaryDTO;
 } {
-  const meals: MealItemDTO[] = dailyMenus
-    .map((dm) => {
-      const meal = dm.meal;
+  // 1. Với mỗi bữa ăn, tính ra danh sách món + tổng dinh dưỡng của bữa đó.
+  const unsortedMeals: MealItemDTO[] = dailyMenus.map((dailyMenu) => {
+    const meal = dailyMenu.meal;
 
-      let mCal = 0;
-      let mPro = 0;
-      let mCarb = 0;
-      let mFat = 0;
+    // Tổng dinh dưỡng của RIÊNG bữa này, cộng dồn dần khi duyệt từng món.
+    let mealCalories = 0;    // return: calories
+    let mealProtein = 0;     // return: protein
+    let mealCarb = 0;        // return: carb
+    let mealFat = 0;         // return: fat
 
-      const dishes: DishItemDTO[] = meal.meal_menus.map((mm) => {
-        const valueByName = new Map(
-          mm.dish.dish_nutrients.map((dn) => [dn.nutrient.name, dn.value]),
-        );
-        const q = mm.quantity;
-        const cal = (valueByName.get(N_CAL) ?? 0) * q;
+    // Với mỗi món trong bữa: tính dinh dưỡng của món đó, đồng thời cộng vào tổng của bữa.
+    const dishes: DishItemDTO[] = meal.meal_menus.map((mealMenu) => {
+      // Khởi tạo Map phục vụ tra cứu chất dinh dưỡng
+      const nutrientValueByName = new Map<string, number>();
+      for (const dishNutrient of mealMenu.dish.dish_nutrients) {
+        nutrientValueByName.set(dishNutrient.nutrient.name, dishNutrient.value);
+      }
+      
+      // Khẩu phần
+      const quantity = mealMenu.quantity;
 
-        mCal += cal;
-        mPro += (valueByName.get(N_PRO) ?? 0) * q;
-        mCarb += (valueByName.get(N_CARB) ?? 0) * q;
-        mFat += (valueByName.get(N_FAT) ?? 0) * q;
+      // Giá trị dinh dưỡng/ 100g
+      const caloriesPer100g = nutrientValueByName.get(N_CAL) ?? 0;
+      const proteinPer100g = nutrientValueByName.get(N_PRO) ?? 0;
+      const carbPer100g = nutrientValueByName.get(N_CARB) ?? 0;
+      const fatPer100g = nutrientValueByName.get(N_FAT) ?? 0;
 
-        return {
-          dishId: mm.dish.dish_id,
-          name: mm.dish.dish_name,
-          imageUrl: mm.dish.image_url,
-          quantity: q,
-          grams: Math.round(q * 100),
-          calories: Math.round(cal),
-        };
-      });
+      // Dinh dưỡng bữa ăn = giá trị trên 100g * khẩu phần (quantity).
+      const dishCalories = caloriesPer100g * quantity;
+      const dishProtein = proteinPer100g * quantity;
+      const dishCarb = carbPer100g * quantity;
+      const dishFat = fatPer100g * quantity;
+
+      // Cộng dồn tính tổng dinh dưỡng bữa ăn
+      mealCalories += dishCalories;
+      mealProtein += dishProtein;
+      mealCarb += dishCarb;
+      mealFat += dishFat;
 
       return {
-        mealId: meal.meal_id,
-        type: meal.meal_type,
-        isFinished: meal.is_finished,
-        calories: round1(mCal),
-        protein: round1(mPro),
-        carb: round1(mCarb),
-        fat: round1(mFat),
-        coverImageUrl: pickCoverImage(dishes),
-        dishes,
+        dishId: mealMenu.dish.dish_id,
+        name: mealMenu.dish.dish_name,
+        imageUrl: mealMenu.dish.image_url,
+        quantity: quantity,
+        grams: Math.round(quantity * 100),
+        calories: Math.round(dishCalories),
       };
-    })
-    .sort((a, b) => (MEAL_ORDER[a.type] ?? 99) - (MEAL_ORDER[b.type] ?? 99));
+    });
 
-  const completed = emptyTotals();
+    return {
+      mealId: meal.meal_id,
+      type: meal.meal_type,
+      isFinished: meal.is_finished,
+      calories: round1(mealCalories),
+      protein: round1(mealProtein),
+      carb: round1(mealCarb),
+      fat: round1(mealFat),
+      coverImageUrl: pickCoverImage(dishes),
+      dishes,
+    };
+  });
+
+  // 2. sắp xếp các bữa theo thứ tự sáng -> trưa -> tối -> phụ.
+  const meals = unsortedMeals.sort((mealA, mealB) => {
+    const orderA = MEAL_ORDER[mealA.type] ?? 99;
+    const orderB = MEAL_ORDER[mealB.type] ?? 99;
+    return orderA - orderB;
+  });
+
+  // 3. cộng dồn dinh dưỡng của các bữa ĐÃ ĐÁNH DẤU ăn xong, cho cả ngày.
+  const completedTotals = emptyTotals();
   for (const meal of meals) {
     if (meal.isFinished) {
-      completed.calories += meal.calories;
-      completed.protein += meal.protein;
-      completed.carb += meal.carb;
-      completed.fat += meal.fat;
+      completedTotals.calories += meal.calories;
+      completedTotals.protein += meal.protein;
+      completedTotals.carb += meal.carb;
+      completedTotals.fat += meal.fat;
     }
   }
 
@@ -135,10 +171,10 @@ export function buildMealsAndSummary(dailyMenus: DailyMenuRow[]): {
     meals,
     summary: {
       completed: {
-        calories: round1(completed.calories),
-        protein: round1(completed.protein),
-        carb: round1(completed.carb),
-        fat: round1(completed.fat),
+        calories: round1(completedTotals.calories),
+        protein: round1(completedTotals.protein),
+        carb: round1(completedTotals.carb),
+        fat: round1(completedTotals.fat),
       },
     },
   };

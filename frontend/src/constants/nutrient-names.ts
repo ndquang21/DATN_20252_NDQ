@@ -1,3 +1,4 @@
+// Định nghĩa tên các chất dinh dưỡng
 export const NUTRIENT_NAMES = {
     CALORIES: "Calories",
     PROTEIN: "Protein",
@@ -5,13 +6,15 @@ export const NUTRIENT_NAMES = {
     FAT: "Fat",
   } as const;
   
-  export const LOCKED_MACRO_NAMES = [
-    NUTRIENT_NAMES.CALORIES,
-    NUTRIENT_NAMES.PROTEIN,
-    NUTRIENT_NAMES.CARBOHYDRATE,
-    NUTRIENT_NAMES.FAT,
-  ] as const;
+// Danh sách các chất bắt buộc
+export const LOCKED_MACRO_NAMES = [
+  NUTRIENT_NAMES.CALORIES,
+  NUTRIENT_NAMES.PROTEIN,
+  NUTRIENT_NAMES.CARBOHYDRATE,
+  NUTRIENT_NAMES.FAT,
+] as const;
   
-  export function isRequiredMacro(name: string): boolean {
-    return (LOCKED_MACRO_NAMES as readonly string[]).includes(name);
-  }
+// Kiểm tra có phải chất bắt buộc
+export function isRequiredMacro(name: string): boolean {
+  return (LOCKED_MACRO_NAMES as readonly string[]).includes(name);
+}

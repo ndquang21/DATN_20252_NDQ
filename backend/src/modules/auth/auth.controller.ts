@@ -1,13 +1,16 @@
 import { Request, Response } from "express";
-import { sendServerError } from "../../utils/http.util";
+import { sendServerError, sendError } from "../../utils/http.util";
 import { authService } from "./auth.service";
-import { registerSchema, loginSchema } from "./auth.validation";
-import { forgotPasswordSchema, resetPasswordSchema} from "./auth.validation";
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from "./auth.validation";
 
 export const authController = {
+  // Đăng ký
   async register(req: Request, res: Response) {
     try {
+      //Kiểm tra dữ liệu
       const parseResult = registerSchema.safeParse(req.body);
+
+      // Ko hợp lệ
       if (!parseResult.success) {
         return res.status(400).json({
           error: "Dữ liệu không hợp lệ",
@@ -15,21 +18,21 @@ export const authController = {
         });
       }
 
+      // Hợp lệ
       const result = await authService.register(parseResult.data);
       return res.status(201).json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        const statusCode =
-          (error as Error & { statusCode?: number }).statusCode || 400;
-        return res.status(statusCode).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // Đăng nhập
   async login(req: Request, res: Response) {
     try {
+      //Kiểm tra dữ liệu
       const parseResult = loginSchema.safeParse(req.body);
+
+      // Ko hợp lệ
       if (!parseResult.success) {
         return res.status(400).json({
           error: "Dữ liệu không hợp lệ",
@@ -37,20 +40,18 @@ export const authController = {
         });
       }
 
+      // Hợp lệ
       const result = await authService.login(parseResult.data);
       return res.status(200).json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        const statusCode =
-          (error as Error & { statusCode?: number }).statusCode || 401;
-        return res.status(statusCode).json({ error: error.message });
-      }
-      return res.status(401).json({ error: "Unauthorized" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 
+  // Đăng xuất
   async logout(req: Request, res: Response) {
     try {
+      // Lấy ra refreshToken
       const { refreshToken } = req.body;
       const result = await authService.logout(refreshToken);
       return res.status(200).json(result);
@@ -59,8 +60,10 @@ export const authController = {
     }
   },
 
+  // Refresh
   async refresh(req: Request, res: Response) {
     try {
+      // Lấy ra refreshToken
       const { refreshToken } = req.body;
       const result = await authService.refresh(refreshToken);
       return res.status(200).json(result);
@@ -69,9 +72,13 @@ export const authController = {
     }
   },
 
+  // Quên mật khẩu
   async forgotPassword(req: Request, res: Response) {
     try {
+      //Kiểm tra dữ liệu
       const parsed = forgotPasswordSchema.safeParse(req.body);
+
+      // Ko hợp lệ
       if (!parsed.success) {
         return res.status(400).json({
           error: "Dữ liệu không hợp lệ",
@@ -79,6 +86,7 @@ export const authController = {
         });
       }
 
+      // Hợp lệ
       const result = await authService.forgotPassword(parsed.data);
       return res.json(result);
     } catch (error) {
@@ -86,9 +94,13 @@ export const authController = {
     }
   },
 
+  // Reset mật khẩu
   async resetPassword(req: Request, res: Response) {
     try {
+      //Kiểm tra dữ liệu
       const parsed = resetPasswordSchema.safeParse(req.body);
+
+      // Ko hợp lệ
       if (!parsed.success) {
         return res.status(400).json({
           error: "Dữ liệu không hợp lệ",
@@ -96,15 +108,11 @@ export const authController = {
         });
       }
 
+      // Hợp lệ
       const result = await authService.resetPassword(parsed.data);
       return res.json(result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        const statusCode =
-          (error as Error & { statusCode?: number }).statusCode || 400;
-        return res.status(statusCode).json({ error: error.message });
-      }
-      return res.status(400).json({ error: "Bad Request" });
+    } catch (error) {
+      return sendError(res, error);
     }
   },
 };

@@ -23,9 +23,13 @@ export const createMealSchema = z
   })
   .refine((data) => data.date !== undefined || data.dailyPlanId !== undefined, {
     message: "Cần truyền date (user) hoặc dailyPlanId (template gợi ý)",
-  });export const addDishSchema = z.object({
+  });
+
+export const addDishSchema = z.object({
   dishId: z.number().int().positive(),
   grams: z.number().positive().max(100000),
-});export const updateDishSchema = z.object({
+});
+
+export const updateDishSchema = z.object({
   grams: z.number().positive().max(100000),
 });

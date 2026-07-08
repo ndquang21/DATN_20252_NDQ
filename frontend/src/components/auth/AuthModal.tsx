@@ -93,7 +93,7 @@ export const AuthModal = ({
 
       setMessage(
         messageFromServer ||
-          "Không thể đăng nhập. Vui lòng kiểm tra lại backend.",
+          "Không thể kết nối máy chủ. Vui lòng thử lại sau.",
       );
     } finally {
       setIsSubmitting(false);
@@ -142,7 +142,7 @@ export const AuthModal = ({
 
       setMessage(
         messageFromServer ||
-          "Không thể đăng ký. Vui lòng kiểm tra lại backend.",
+          "Không thể kết nối máy chủ. Vui lòng thử lại sau.",
       );
     } finally {
       setIsSubmitting(false);

@@ -24,7 +24,7 @@ export default function GuestLayout() {
                   Foodi
                 </span>
                 <span className="mt-0.5 block font-display text-[9px] font-medium tracking-widest text-neutral-400 capitalize">
-                  Academic Dinh Dưỡng
+                  Theo dõi dinh dưỡng
                 </span>
               </div>
             </div>
@@ -55,7 +55,7 @@ export default function GuestLayout() {
                 Foodi
               </span>
               <span className="text-slate-300">|</span>
-              <span>Giải pháp dinh dưỡng và sức khỏe cá nhân hóa</span>
+              <span>Theo dõi dinh dưỡng và lựa chọn thực đơn</span>
             </div>
 
             <div className="flex items-center gap-5">

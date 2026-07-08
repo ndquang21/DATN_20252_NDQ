@@ -3,12 +3,10 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
+  // Người gửi
   const from = process.env.MAIL_FROM || "Foodi <onboarding@resend.dev>";
 
-  const { error } = await resend.emails.send({
-    from,
-    to,
-    subject: "Foodi — Đặt lại mật khẩu",
+  const { error } = await resend.emails.send({ from, to, subject: "Foodi — Đặt lại mật khẩu",
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
         <h2>Đặt lại mật khẩu Foodi</h2>
