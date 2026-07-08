@@ -24,6 +24,9 @@ function buildAdminListWhere(search: string): Prisma.UserWhereInput {
 }
 
 export const userRepository = {
+  // ===== Tra cứu user =====
+
+  // Lấy user theo id, đủ field hồ sơ (cho chính chủ xem)
   findById(user_id: number) {
     return prisma.user.findUnique({
       where: { user_id },
@@ -46,6 +49,7 @@ export const userRepository = {
     });
   },
 
+  // Lấy user theo id, ít field hơn (cho admin xem tổng quan)
   findByIdForAdmin(user_id: number) {
     return prisma.user.findUnique({
       where: { user_id },
@@ -63,14 +67,17 @@ export const userRepository = {
     });
   },
 
+  // Lấy user kèm password (chỉ dùng để so sánh mật khẩu)
   findByIdWithPassword(user_id: number) {
     return prisma.user.findUnique({ where: { user_id } });
   },
 
+  // Tra user theo email (kiểm trùng khi đăng ký/tạo user)
   findByEmail(email: string) {
     return prisma.user.findUnique({ where: { email } });
   },
 
+  // Danh sách user cho admin, có tìm kiếm + phân trang
   listForAdmin(search: string, skip: number, take: number) {
     return prisma.user.findMany({
       where: buildAdminListWhere(search),
@@ -81,22 +88,31 @@ export const userRepository = {
     });
   },
 
+  // Đếm tổng user khớp tìm kiếm (phục vụ phân trang)
   countForAdmin(search: string) {
     return prisma.user.count({ where: buildAdminListWhere(search) });
   },
 
+  // ===== Ghi/sửa/xóa user =====
+
+  // Tạo user mới
   create(data: CreateUserDTO) {
     return prisma.user.create({ data });
   },
 
-  delete(user_id: number) {
-    return prisma.user.delete({ where: { user_id } });
-  },
-
+  // Cập nhật user (dùng chung: hồ sơ, mật khẩu, avatar...)
   update(user_id: number, data: Prisma.UserUpdateInput) {
     return prisma.user.update({ where: { user_id }, data });
   },
 
+  // Xóa user
+  delete(user_id: number) {
+    return prisma.user.delete({ where: { user_id } });
+  },
+
+  // ===== Chất dinh dưỡng theo dõi =====
+
+  // Lấy danh sách chất user đang theo dõi
   findTrackedNutrients(user_id: number) {
     return prisma.userTrackedNutrient.findMany({
       where: { user_id },
@@ -114,6 +130,7 @@ export const userRepository = {
     });
   },
 
+  // Tra nhiều chất theo id (validate trước khi cập nhật theo dõi)
   findNutrientsByIds(ids: number[]) {
     return prisma.nutrient.findMany({
       where: { nutrient_id: { in: ids } },
@@ -126,6 +143,7 @@ export const userRepository = {
     });
   },
 
+  // Xóa hết + tạo lại danh sách theo dõi trong 1 transaction
   replaceTrackedNutrients(
     user_id: number,
     slots: { sortOrder: number; nutrientId: number }[],

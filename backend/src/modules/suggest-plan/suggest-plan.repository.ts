@@ -1,4 +1,4 @@
-import { prisma } from "../../config/prisma";
+﻿import { prisma } from "../../config/prisma";
 import { Prisma } from "../../../prisma/generated/prisma/client";
 import { DAILY_PLAN_NUTRIENT_NAMES } from "../../constants/nutrient-names";
 import { MAX_SUGGEST_PLAN_DAYS } from "../../constants/suggest-plan";
@@ -14,6 +14,7 @@ function makeTemplatePlanDate(suggestPlanId: number, dayIndex: number): Date {
   return d;
 }
 
+// Include đầy đủ bữa + món + dinh dưỡng macro của 1 ngày
 const dailyPlanMealsInclude = {
   daily_menus: {
     include: {
@@ -42,6 +43,7 @@ const dailyPlanMealsInclude = {
   },
 } as const;
 
+// Include rút gọn: chỉ đủ để tính ngày có hoàn chỉnh không
 const planDaysForListInclude = {
   suggest_plan_days: {
     orderBy: { day_index: "asc" as const },
@@ -64,6 +66,7 @@ const planDaysForListInclude = {
   },
 } as const;
 
+// Where tìm gói theo tên/ mô tả (bản admin)
 function buildListWhere(search: string): Prisma.SuggestPlanWhereInput {
   if (!search) return {};
   return {
@@ -74,6 +77,7 @@ function buildListWhere(search: string): Prisma.SuggestPlanWhereInput {
   };
 }
 
+// Where tìm gói công khai: luôn kèm is_public
 function buildPublicListWhere(search: string): Prisma.SuggestPlanWhereInput {
   const publicOnly: Prisma.SuggestPlanWhereInput = { is_public: true };
   if (!search) return publicOnly;
@@ -90,6 +94,7 @@ function buildPublicListWhere(search: string): Prisma.SuggestPlanWhereInput {
   };
 }
 
+// OrderBy danh sách công khai: mới nhất hoặc cũ nhất
 function buildPublicListOrderBy(
   sort: "created_desc" | "created_asc",
 ): Prisma.SuggestPlanOrderByWithRelationInput {
@@ -104,6 +109,7 @@ export type SuggestPlanListSort =
   | "public_first"
   | "hidden_first";
 
+// OrderBy danh sách admin: thêm ưu tiên công khai/ ẩn
 function buildListOrderBy(
   sort: SuggestPlanListSort,
 ):
@@ -122,6 +128,25 @@ function buildListOrderBy(
 }
 
 export const suggestPlanRepository = {
+  // ===== Admin: quản lý gói gợi ý =====
+
+  // Dinh dưỡng 1 ngày: link suggest_plan_day -> daily_plan
+  findDailyPlanLink(suggestPlanId: number, dayIndex: number) {
+    return prisma.suggestPlanDay.findUnique({
+      where: {
+        suggest_plan_id_day_index: {
+          suggest_plan_id: suggestPlanId,
+          day_index: dayIndex,
+        },
+      },
+      select: {
+        daily_plan_id: true,
+        day_index: true,
+      },
+    });
+  },
+
+  // Danh sách gói (admin), kèm dữ liệu tính ngày hoàn chỉnh
   listForAdmin(
     search: string,
     skip: number,
@@ -137,54 +162,12 @@ export const suggestPlanRepository = {
     });
   },
 
+  // Đếm tổng số gói khớp tìm kiếm (admin)
   countForAdmin(search: string) {
     return prisma.suggestPlan.count({ where: buildListWhere(search) });
   },
 
-  listPublic(
-    search: string,
-    skip: number,
-    take: number,
-    sort: "created_desc" | "created_asc" = "created_desc",
-  ) {
-    return prisma.suggestPlan.findMany({
-      where: buildPublicListWhere(search),
-      select: {
-        suggest_plan_id: true,
-        name: true,
-        description: true,
-        image_url: true,
-        day_count: true,
-      },
-      orderBy: buildPublicListOrderBy(sort),
-      skip,
-      take,
-    });
-  },
-
-  countPublic(search: string) {
-    return prisma.suggestPlan.count({ where: buildPublicListWhere(search) });
-  },
-
-  findPublicByIdWithDays(suggestPlanId: number) {
-    return prisma.suggestPlan.findFirst({
-      where: {
-        suggest_plan_id: suggestPlanId,
-        is_public: true,
-      },
-      include: {
-        suggest_plan_days: {
-          orderBy: { day_index: "asc" },
-          include: {
-            daily_plan: {
-              include: dailyPlanMealsInclude,
-            },
-          },
-        },
-      },
-    });
-  },
-
+  // Chi tiết 1 gói kèm mọi ngày (admin)
   findByIdWithDays(suggestPlanId: number) {
     return prisma.suggestPlan.findUnique({
       where: { suggest_plan_id: suggestPlanId },
@@ -201,15 +184,15 @@ export const suggestPlanRepository = {
     });
   },
 
-  /** null nếu không tồn tại hoặc không thuộc admin (template của admin đó) */
-  async findOwnedByAdmin(suggestPlanId: number, adminUserId: number) {
+  /** null nếu không tồn tại hoặc không phải template hợp lệ */
+  async findTemplatePlan(suggestPlanId: number) {
     const plan = await prisma.suggestPlan.findUnique({
       where: { suggest_plan_id: suggestPlanId },
       include: {
         suggest_plan_days: {
           include: {
             daily_plan: {
-              select: { user_id: true, is_template: true },
+              select: { is_template: true },
             },
           },
         },
@@ -218,14 +201,13 @@ export const suggestPlanRepository = {
     if (!plan) return null;
     if (plan.suggest_plan_days.length === 0) return null;
 
-    const owned = plan.suggest_plan_days.every(
-      (d) =>
-        d.daily_plan.user_id === adminUserId &&
-        d.daily_plan.is_template === true,
+    const isValidTemplate = plan.suggest_plan_days.every(
+      (d) => d.daily_plan.is_template === true,
     );
-    return owned ? plan : null;
+    return isValidTemplate ? plan : null;
   },
 
+  // Tạo gói mới kèm ngày trống (transaction)
   createWithEmptyDays(
     adminUserId: number,
     name?: string,
@@ -263,6 +245,7 @@ export const suggestPlanRepository = {
     });
   },
 
+  // Sửa tên/ mô tả/ ảnh gói
   updateMetadata(suggestPlanId: number, data: Prisma.SuggestPlanUpdateInput) {
     return prisma.suggestPlan.update({
       where: { suggest_plan_id: suggestPlanId },
@@ -270,6 +253,7 @@ export const suggestPlanRepository = {
     });
   },
 
+  // Bật/tắt công khai gói
   setPublic(suggestPlanId: number, isPublic: boolean) {
     return prisma.suggestPlan.update({
       where: { suggest_plan_id: suggestPlanId },
@@ -281,6 +265,7 @@ export const suggestPlanRepository = {
     });
   },
 
+  // Xóa gói + toàn bộ daily_plan con (transaction)
   deleteById(suggestPlanId: number) {
     return prisma.$transaction(async (tx) => {
       const days = await tx.suggestPlanDay.findMany({
@@ -300,6 +285,7 @@ export const suggestPlanRepository = {
     });
   },
 
+  // Thêm 1 ngày trống vào cuối gói (transaction)
   addEmptyDay(suggestPlanId: number, adminUserId: number) {
     return prisma.$transaction(async (tx) => {
       const plan = await tx.suggestPlan.findUnique({
@@ -338,7 +324,10 @@ export const suggestPlanRepository = {
         dayCount: dayIndex,
       };
     });
-  },  removeDayAtIndex(suggestPlanId: number, dayIndex: number) {
+  },
+
+  // Xóa 1 ngày theo dayIndex + re-index các ngày sau (transaction)
+  removeDayAtIndex(suggestPlanId: number, dayIndex: number) {
     return prisma.$transaction(async (tx) => {
       const plan = await tx.suggestPlan.findUnique({
         where: { suggest_plan_id: suggestPlanId },
@@ -362,9 +351,13 @@ export const suggestPlanRepository = {
       });
       if (!link) {
         return { ok: false as const, reason: "not_found" as const };
-      }      await tx.dailyPlan.delete({
+      }
+
+      await tx.dailyPlan.delete({
         where: { daily_plan_id: link.daily_plan_id },
-      });      const toReindex = await tx.suggestPlanDay.findMany({
+      });
+
+      const toReindex = await tx.suggestPlanDay.findMany({
         where: {
           suggest_plan_id: suggestPlanId,
           day_index: { gt: dayIndex },
@@ -399,21 +392,9 @@ export const suggestPlanRepository = {
     });
   },
 
-  findDailyPlanLink(suggestPlanId: number, dayIndex: number) {
-    return prisma.suggestPlanDay.findUnique({
-      where: {
-        suggest_plan_id_day_index: {
-          suggest_plan_id: suggestPlanId,
-          day_index: dayIndex,
-        },
-      },
-      select: {
-        daily_plan_id: true,
-        day_index: true,
-      },
-    });
-  },
+  // ===== Public: user xem gói đang công khai =====
 
+  // Kiểm 1 mealId có thuộc gói đang công khai không
   isMealInPublicSuggestPlan(mealId: number) {
     return prisma.meal.findFirst({
       where: {
@@ -431,6 +412,53 @@ export const suggestPlanRepository = {
         },
       },
       select: { meal_id: true },
+    });
+  },
+
+  // Danh sách gói công khai, chỉ lấy trường cần hiển thị
+  listPublic(
+    search: string,
+    skip: number,
+    take: number,
+    sort: "created_desc" | "created_asc" = "created_desc",
+  ) {
+    return prisma.suggestPlan.findMany({
+      where: buildPublicListWhere(search),
+      select: {
+        suggest_plan_id: true,
+        name: true,
+        description: true,
+        image_url: true,
+        day_count: true,
+      },
+      orderBy: buildPublicListOrderBy(sort),
+      skip,
+      take,
+    });
+  },
+
+  // Đếm tổng số gói công khai khớp tìm kiếm
+  countPublic(search: string) {
+    return prisma.suggestPlan.count({ where: buildPublicListWhere(search) });
+  },
+
+  // Chi tiết 1 gói công khai kèm mọi ngày
+  findPublicByIdWithDays(suggestPlanId: number) {
+    return prisma.suggestPlan.findFirst({
+      where: {
+        suggest_plan_id: suggestPlanId,
+        is_public: true,
+      },
+      include: {
+        suggest_plan_days: {
+          orderBy: { day_index: "asc" },
+          include: {
+            daily_plan: {
+              include: dailyPlanMealsInclude,
+            },
+          },
+        },
+      },
     });
   },
 };

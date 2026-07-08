@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+
 import Calendar from "../../components/home/Calendar";
 import DailyStats from "../../components/home/DailyStats";
 import DayMeals from "../../components/home/DayMeals";
@@ -6,9 +7,12 @@ import MyDishesSection from "../../components/home/MyDishesSection";
 import MealEditModal from "../../components/home/MealEditModal";
 import CreateMealModal from "../../components/home/CreateMealModal";
 import TrackNutrientsModal from "../../components/home/TrackNutrientsModal";
-import { dailyPlanService } from "../../services/dailyPlan.service";
-import { authService } from "../../services/auth.service";
+
 import type { DailyPlanResponse, MealType } from "../../types/dailyPlan";
+
+import { dailyPlanService } from "../../services/dailyPlan.service";
+import { userService } from "../../services/user.service";
+
 import { todayStr } from "../../utils/format.util";
 
 function optimisticToggle(
@@ -47,8 +51,8 @@ export default function HomePage() {
   const detailMeal = plan?.meals.find((m) => m.mealId === detailMealId) ?? null;
 
   useEffect(() => {
-    authService
-      .me()
+    userService
+      .getProfile()
       .then((res) => setTdee(res.data.user.TDEE))
       .catch(() => setTdee(null));
   }, []);

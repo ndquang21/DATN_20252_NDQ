@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { sendServerError } from "../../utils/http.util";
+import { sendError } from "../../utils/http.util";
 import { dailyPlanService } from "./daily-plan.service";
 import {
   getDailyPlanQuerySchema,
@@ -9,21 +9,8 @@ import {
   updateDishSchema,
 } from "./daily-plan.validation";
 
-const REASON_STATUS: Record<string, { status: number; error: string }> = {
-  forbidden: {
-    status: 404,
-    error: "Không tìm thấy bữa ăn hoặc bạn không có quyền",
-  },
-  dish_not_found: { status: 404, error: "Không tìm thấy món ăn" },
-  not_in_meal: { status: 404, error: "Món không có trong bữa" },
-  duplicate: { status: 409, error: "Món đã có trong bữa" },
-  meal_type_exists: {
-    status: 409,
-    error: "Loại bữa này đã tồn tại trong ngày",
-  },
-};
-
 export const dailyPlanController = {
+  // getDailyPlan
   async getDailyPlan(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -44,10 +31,11 @@ export const dailyPlanController = {
       );
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Xác nhận hoàn thành món
   async setMealFinished(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -79,10 +67,11 @@ export const dailyPlanController = {
       }
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Lấy thông tin dinh dưỡng bữa ăn
   async getMealNutrients(req: Request, res: Response) {
     try {
       if (!req.user) {
@@ -105,10 +94,11 @@ export const dailyPlanController = {
       }
       return res.json(result);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Tạo bữa
   async createMeal(req: Request, res: Response) {
     try {
       if (!req.user)
@@ -131,16 +121,13 @@ export const dailyPlanController = {
         dishId: parsed.data.dishId,
         grams: parsed.data.grams,
       });
-      if (!result.ok) {
-        const m = REASON_STATUS[result.reason];
-        return res.status(m.status).json({ error: m.error });
-      }
       return res.status(201).json({ mealId: result.mealId, plan: result.plan });
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Thêm món
   async addDish(req: Request, res: Response) {
     try {
       if (!req.user)
@@ -160,22 +147,19 @@ export const dailyPlanController = {
           });
       }
 
-      const result = await dailyPlanService.addDishToMeal(
+      const plan = await dailyPlanService.addDishToMeal(
         req.user.userId,
         mealId,
         parsed.data.dishId,
         parsed.data.grams,
       );
-      if (!result.ok) {
-        const m = REASON_STATUS[result.reason];
-        return res.status(m.status).json({ error: m.error });
-      }
-      return res.json(result.plan);
+      return res.json(plan);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Thay đổi khẩu phần
   async updateDish(req: Request, res: Response) {
     try {
       if (!req.user)
@@ -196,22 +180,19 @@ export const dailyPlanController = {
           });
       }
 
-      const result = await dailyPlanService.updateMealDishGrams(
+      const plan = await dailyPlanService.updateMealDishGrams(
         req.user.userId,
         mealId,
         dishId,
         parsed.data.grams,
       );
-      if (!result.ok) {
-        const m = REASON_STATUS[result.reason];
-        return res.status(m.status).json({ error: m.error });
-      }
-      return res.json(result.plan);
+      return res.json(plan);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 
+  // Xóa món
   async removeDish(req: Request, res: Response) {
     try {
       if (!req.user)
@@ -222,18 +203,14 @@ export const dailyPlanController = {
         return res.status(400).json({ error: "mealId/dishId không hợp lệ" });
       }
 
-      const result = await dailyPlanService.removeMealDish(
+      const plan = await dailyPlanService.removeMealDish(
         req.user.userId,
         mealId,
         dishId,
       );
-      if (!result.ok) {
-        const m = REASON_STATUS[result.reason];
-        return res.status(m.status).json({ error: m.error });
-      }
-      return res.json(result.plan);
+      return res.json(plan);
     } catch (error) {
-      return sendServerError(res, error);
+      return sendError(res, error);
     }
   },
 };

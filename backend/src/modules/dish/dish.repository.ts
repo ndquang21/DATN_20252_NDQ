@@ -43,6 +43,7 @@ const dishDetailSelect = {
   },
 } satisfies Prisma.DishSelect;
 
+// Dựng điều kiện where cho món hệ thống: is_global: true + lọc theo tên nếu có search
 function buildGlobalDishWhere(search: string): Prisma.DishWhereInput {
   const where: Prisma.DishWhereInput = { is_global: true };
   if (search) {
@@ -51,11 +52,26 @@ function buildGlobalDishWhere(search: string): Prisma.DishWhereInput {
   return where;
 }
 
+
+// Dựng điều kiện where cho món user được phép xem (món hệ thống HOẶC món do chính họ tạo)
+function buildAccessibleDishWhere(userId: number, search: string): Prisma.DishWhereInput {
+  const where: Prisma.DishWhereInput = {
+    OR: [{ is_global: true }, { created_by: userId }],
+  };
+  if (search) {
+    where.dish_name = { contains: search, mode: "insensitive" };
+  }
+  return where;
+}
+
+
+// Xóa dây chuyền khi xóa 1 món: xóa hết bữa ăn đang chứa món đó, kèm dọn tiếp nếu bữa/ngày rỗng
 async function cleanupMealsAfterDishDelete(
   tx: Prisma.TransactionClient,
   dishId: number,
 ) {
-  const mealMenus = await tx.mealMenu.findMany({
+  // Tìm tất cả bữa ăn đang chứa món này (qua bảng nối MealMenu).
+  const mealMenuRows = await tx.mealMenu.findMany({
     where: { dish_id: dishId },
     select: {
       meal_id: true,
@@ -67,26 +83,45 @@ async function cleanupMealsAfterDishDelete(
     },
   });
 
-  const affectedMealIds = [...new Set(mealMenus.map((m) => m.meal_id))];
+  // Gom danh sách meal_id bị ảnh hưởng, loại trùng bằng Set.
+  const mealIdsFound = mealMenuRows.map((row) => {
+    return row.meal_id;
+  });
+  const uniqueMealIds = new Set(mealIdsFound);
+  const affectedMealIds = [...uniqueMealIds];
 
+  // Xóa món khỏi bảng Dish
   await tx.dish.delete({ where: { dish_id: dishId } });
 
+  // Với mỗi bữa từng chứa món vừa xóa, kiểm tra và xóa nếu rỗng
   for (const mealId of affectedMealIds) {
-    const remaining = await tx.mealMenu.count({ where: { meal_id: mealId } });
-    if (remaining > 0) continue;
+    const remainingDishesInMeal = await tx.mealMenu.count({
+      where: { meal_id: mealId },
+    });
 
+    // Bữa này vẫn còn món khác -> không cần dọn, xét bữa tiếp theo.
+    if (remainingDishesInMeal > 0) {
+      continue;
+    }
+
+    // Bữa đã rỗng -> tìm kế hoạch ngày chứa bữa này, phải tìm trước khi
+    // xóa bữa, vì xóa xong sẽ không tra ra được nữa
     const dailyMenu = await tx.dailyMenu.findFirst({
       where: { meal_id: mealId },
       select: { daily_plan_id: true },
     });
 
+    // Xóa bữa rỗng
     await tx.meal.delete({ where: { meal_id: mealId } });
 
+    // Kiểm tra tiếp: cả ngày còn bữa nào khác không?
     if (dailyMenu) {
-      const remainingMeals = await tx.dailyMenu.count({
+      const remainingMealsInDay = await tx.dailyMenu.count({
         where: { daily_plan_id: dailyMenu.daily_plan_id },
       });
-      if (remainingMeals === 0) {
+
+      // Ngày cũng rỗng theo -> xóa luôn kế hoạch ngày đó.
+      if (remainingMealsInDay === 0) {
         await tx.dailyPlan.delete({
           where: { daily_plan_id: dailyMenu.daily_plan_id },
         });
@@ -95,22 +130,6 @@ async function cleanupMealsAfterDishDelete(
   }
 }
 
-function buildAccessibleDishWhere(userId: number, search: string): Prisma.DishWhereInput {
-  const where: Prisma.DishWhereInput = {
-    OR: [{ is_global: true }, { created_by: userId }],
-  };
-  if (search) {
-    where.dish_name = { contains: search, mode: "insensitive" };
-  }
-  return where;
-}
-
-function pickMacroValue(
-  rows: { value: number; nutrient: { name: string } }[],
-  name: string,
-): number {
-  return rows.find((r) => r.nutrient.name === name)?.value ?? 0;
-}
 
 export const dishRepository = {
   searchDishes(userId: number, search: string, skip: number, take: number) {
@@ -148,6 +167,19 @@ export const dishRepository = {
   countMyDishes(userId: number) {
     return prisma.dish.count({
       where: { created_by: userId, is_global: false },
+    });
+  },
+
+  // Tìm món cá nhân của user bằng tên (unique trong phạm vi user đó)
+  findMyDishByName(userId: number, name: string, excludeDishId?: number) {
+    return prisma.dish.findFirst({
+      where: {
+        created_by: userId,
+        is_global: false,
+        dish_name: { equals: name, mode: "insensitive" },
+        ...(excludeDishId != null ? { dish_id: { not: excludeDishId } } : {}),
+      },
+      select: { dish_id: true },
     });
   },
 
@@ -363,5 +395,3 @@ export const dishRepository = {
     });
   },
 };
-
-export { pickMacroValue };

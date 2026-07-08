@@ -9,7 +9,6 @@ import { router as nutrientRouter } from "./modules/nutrient/nutrient.route";
 import { router as suggestPlanRouter } from "./modules/suggest-plan/suggest-plan.route";
 import { router as adminDashboardRouter } from "./modules/admin-dashboard/admin-dashboard.route";
 
-
 config();
 
 const app = express();

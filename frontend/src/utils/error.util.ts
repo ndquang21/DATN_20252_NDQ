@@ -1,4 +1,4 @@
-// Moi thông báo lỗi do server trả về (nằm sâu ở err.response.data.error);
+// Thông báo lỗi do server trả về nằm ở err.response.data.error;
 // không tìm thấy thì trả về câu dự phòng (fallback).
 export function parseApiError(err: unknown, fallback: string): string {
   if (

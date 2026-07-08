@@ -1,5 +1,4 @@
 import { api } from "./api";
-import { authService } from "./auth.service";
 
 export type Gender = "male" | "female";
 export type ActivityLevel =
@@ -30,9 +29,26 @@ export type UpdateAvatarResponse = {
   avatar_url: string;
 };
 
+type CurrentUserResponse = {
+  user: {
+    user_id: number;
+    email: string;
+    username: string;
+    role: string;
+    avatar_url: string;
+    gender: string | null;
+    dob: string | null;
+    height: number | null;
+    weight: number | null;
+    activity_level: string | null;
+    TDEE: number | null;
+    goal: string | null;
+  };
+};
+
 export const userService = {
   getProfile() {
-    return authService.me();
+    return api.get<CurrentUserResponse>("/users/me");
   },
 
   updateAvatar(imageFile: File) {

@@ -1,5 +1,5 @@
-import { Prisma, NutrientUnit } from "../../../prisma/generated/prisma/client";
-import { dishRepository, pickMacroValue } from "./dish.repository";
+import { NutrientUnit } from "../../../prisma/generated/prisma/client";
+import { dishRepository } from "./dish.repository";
 import { nutrientRepository } from "../nutrient/nutrient.repository";
 import {
   DishSummaryDTO,
@@ -8,14 +8,35 @@ import {
   MyDishesResponseDTO,
   AdminGlobalDishDetailDTO,
   AdminGlobalDishListResponseDTO,
+  DishDetailDTO
 } from "./dish.dto";
-import { DishDetailDTO } from "./dish.dto";
 import {
   LOCKED_MACRO_NAMES,
   NUTRIENT_NAMES,
 } from "../../constants/nutrient-names";
 import { DEFAULT_DISH_IMAGE_URL } from "../../constants/default-images";
+import { appError } from "../../utils/http.util";
 
+
+// Tra giá trị 1 chất theo tên trong mảng dinh dưỡng
+function pickMacroValue(
+  rows: { value: number; nutrient: { name: string } }[],
+  name: string,
+): number {
+  // Tìm trong "rows" 1 phần tử có tên chất khớp với "name"
+  const matchedRow = rows.find((row) => {
+    return row.nutrient.name === name;
+  });
+
+  // Tìm thấy thì lấy giá trị; không thấy (món không khai chất này) thì coi
+  // giá trị trên 100g là 0
+  if (matchedRow === undefined) {
+    return 0;
+  }
+  return matchedRow.value;
+}
+
+// Rút gọn món kèm dinh dưỡng chính
 function toDishSummary(d: {
   dish_id: number;
   dish_name: string;
@@ -27,7 +48,8 @@ function toDishSummary(d: {
     dishId: d.dish_id,
     name: d.dish_name,
     imageUrl: d.image_url,
-    caloriesPer100g: Math.round(
+    caloriesPer100g: 
+    Math.round(
       pickMacroValue(dn, NUTRIENT_NAMES.CALORIES),
     ),
     proteinPer100g:
@@ -70,14 +92,16 @@ function toDishDetail(row: {
   };
 }
 
+// Kiểm tra id chất có tồn tại và đủ 4 macro bắt buộc k
 async function areNutrientsValid(
   nutrients: { nutrientId: number; value: number }[],
 ): Promise<boolean> {
-  const ids = nutrients.map((n) => n.nutrientId);
-  const known = await nutrientRepository.findByIds(ids);
-  if (known.length !== ids.length) return false;
+  const ids = nutrients.map((n) => n.nutrientId); // lấy ra danh sách chất được gửi lên
+  const known = await nutrientRepository.findByIds(ids); // tra DB xem những chất này có tồn tại
+  if (known.length !== ids.length) return false; // thiếu 1 chất nào đó -> không hợp lệ
 
-  const knownNames = new Set(known.map((n) => n.name));
+  // Phải có đủ 4 macro bắt buộc
+  const knownNames = new Set(known.map((n) => n.name)); // Tên các chất đã gửi lên
   for (const macro of LOCKED_MACRO_NAMES) {
     if (!knownNames.has(macro)) return false;
   }
@@ -85,6 +109,7 @@ async function areNutrientsValid(
 }
 
 export const dishService = {
+  // Tìm món (user tìm cả món hệ thống lẫn món riêng)
   async search(
     userId: number,
     search: string,
@@ -108,6 +133,8 @@ export const dishService = {
     return { items, total, page, pageSize };
   },
 
+
+  // Danh sách món cá nhân của user
   async listMyDishes(
     userId: number,
     page: number,
@@ -121,45 +148,46 @@ export const dishService = {
     ]);
 
     return {
-      items: rows.map(toDishSummary),
+      items: rows.map((row) => {
+        return toDishSummary(row);
+      }),
       total,
       page,
       pageSize,
     };
   },
 
+
+  // Tạo món cá nhân
   async createMyDish(
     userId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
-  ): Promise<
-    | { ok: true; dish: DishSummaryDTO }
-    | { ok: false; reason: "invalid_nutrients" | "duplicate_name" }
-  > {
+  ): Promise<DishSummaryDTO> {
     if (!(await areNutrientsValid(nutrients))) {
-      return { ok: false, reason: "invalid_nutrients" };
+      throw appError(
+        "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
+        400,
+      );
     }
 
-    try {
-      const created = await dishRepository.createMyDishWithNutrients({
-        userId,
-        name,
-        imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE_URL,
-        nutrients,
-      });
-      return { ok: true, dish: toDishSummary(created) };
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        return { ok: false, reason: "duplicate_name" };
-      }
-      throw error;
+    const trimmedName = name.trim();
+    if (await dishRepository.findMyDishByName(userId, trimmedName)) {
+      throw appError("Bạn đã có món trùng tên. Vui lòng đặt tên khác.", 409);
     }
+
+    const created = await dishRepository.createMyDishWithNutrients({
+      userId,
+      name: trimmedName,
+      imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE_URL,
+      nutrients,
+    });
+    return toDishSummary(created);
   },
 
+
+  // Xem chi tiết 1 món cá nhân
   async getMyDishById(
     userId: number,
     dishId: number,
@@ -169,63 +197,55 @@ export const dishService = {
     return toDishDetail(row);
   },
 
+
+  // Sửa món cá nhân
   async updateMyDish(
     userId: number,
     dishId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
-  ): Promise<
-    | { ok: true; dish: DishSummaryDTO; oldImageUrl: string | null }
-    | {
-        ok: false;
-        reason: "not_found" | "invalid_nutrients" | "duplicate_name";
-      }
-  > {
+  ): Promise<{ dish: DishSummaryDTO; oldImageUrl: string | null }> {
     const existing = await dishRepository.findMyDishById(userId, dishId);
-    if (!existing) return { ok: false, reason: "not_found" };
+    if (!existing) throw appError("Không tìm thấy món của bạn", 404);
 
     if (!(await areNutrientsValid(nutrients))) {
-      return { ok: false, reason: "invalid_nutrients" };
+      throw appError(
+        "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
+        400,
+      );
     }
 
-    try {
-      const updated = await dishRepository.updateMyDishWithNutrients({
-        dishId,
-        userId,
-        name,
-        imageUrl,
-        nutrients,
-      });
-      if (!updated) return { ok: false, reason: "not_found" };
-
-      return {
-        ok: true,
-        dish: toDishSummary(updated),
-        oldImageUrl: existing.image_url,
-      };
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        return { ok: false, reason: "duplicate_name" };
-      }
-      throw error;
+    const trimmedName = name.trim();
+    if (await dishRepository.findMyDishByName(userId, trimmedName, dishId)) {
+      throw appError("Bạn đã có món trùng tên. Vui lòng đặt tên khác.", 409);
     }
+
+    const updated = await dishRepository.updateMyDishWithNutrients({
+      dishId,
+      userId,
+      name: trimmedName,
+      imageUrl,
+      nutrients,
+    });
+    if (!updated) throw appError("Không tìm thấy món của bạn", 404);
+
+    return { dish: toDishSummary(updated), oldImageUrl: existing.image_url };
   },
 
+
+  // Xóa món cá nhân
   async removeMyDish(
     userId: number,
     dishId: number,
-  ): Promise<
-    { ok: true; imageUrl: string | null } | { ok: false; reason: "not_found" }
-  > {
+  ): Promise<{ imageUrl: string | null }> {
     const deleted = await dishRepository.deleteMyDishWithCleanup(userId, dishId);
-    if (!deleted) return { ok: false, reason: "not_found" };
-    return { ok: true, imageUrl: deleted.image_url };
+    if (!deleted) throw appError("Không tìm thấy món của bạn", 404);
+    return { imageUrl: deleted.image_url };
   },
-  
+
+
+  // (Admin) danh sách món hệ thống
   async listGlobalDishes(
     search: string,
     page: number,
@@ -237,13 +257,17 @@ export const dishService = {
       dishRepository.countGlobalDishes(search),
     ]);
     return {
-      items: rows.map(toDishSummary),
+      items: rows.map((row) => {
+        return toDishSummary(row);
+      }),
       total,
       page,
       pageSize,
     };
   },
 
+
+  // (Admin) xem chi tiết món hệ thống
   async getGlobalDishById(
     dishId: number,
   ): Promise<AdminGlobalDishDetailDTO | null> {
@@ -252,99 +276,82 @@ export const dishService = {
     return toDishDetail(row);
   },
 
+
+  // (Admin) tạo món hệ thống
   async createGlobalDish(
     adminId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
-  ): Promise<
-    | { ok: true; dish: DishSummaryDTO }
-    | { ok: false; reason: "invalid_nutrients" | "duplicate_name" }
-  > {
+  ): Promise<DishSummaryDTO> {
     if (!(await areNutrientsValid(nutrients))) {
-      return { ok: false, reason: "invalid_nutrients" };
+      throw appError(
+        "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
+        400,
+      );
     }
 
     const trimmedName = name.trim();
     if (await dishRepository.findGlobalDishByName(trimmedName)) {
-      return { ok: false, reason: "duplicate_name" };
+      throw appError(
+        "Đã có món hệ thống trùng tên. Vui lòng đặt tên khác.",
+        409,
+      );
     }
 
-    try {
-      const created = await dishRepository.createGlobalDishWithNutrients({
-        adminId,
-        name: trimmedName,
-        imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE_URL,
-        nutrients,
-      });
-      return { ok: true, dish: toDishSummary(created) };
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        return { ok: false, reason: "duplicate_name" };
-      }
-      throw error;
-    }
+    const created = await dishRepository.createGlobalDishWithNutrients({
+      adminId,
+      name: trimmedName,
+      imageUrl: imageUrl ?? DEFAULT_DISH_IMAGE_URL,
+      nutrients,
+    });
+    return toDishSummary(created);
   },
 
+
+  // (Admin) sửa món hệ thống
   async updateGlobalDish(
     dishId: number,
     name: string,
     nutrients: { nutrientId: number; value: number }[],
     imageUrl?: string,
-  ): Promise<
-    | { ok: true; dish: DishSummaryDTO; oldImageUrl: string | null }
-    | {
-        ok: false;
-        reason: "not_found" | "invalid_nutrients" | "duplicate_name";
-      }
-  > {
+  ): Promise<{ dish: DishSummaryDTO; oldImageUrl: string | null }> {
     const existing = await dishRepository.findGlobalDishById(dishId);
-    if (!existing) return { ok: false, reason: "not_found" };
+    if (!existing) throw appError("Không tìm thấy món hệ thống", 404);
 
     if (!(await areNutrientsValid(nutrients))) {
-      return { ok: false, reason: "invalid_nutrients" };
+      throw appError(
+        "Chất dinh dưỡng không hợp lệ hoặc thiếu macro bắt buộc.",
+        400,
+      );
     }
 
     const trimmedName = name.trim();
     if (await dishRepository.findGlobalDishByName(trimmedName, dishId)) {
-      return { ok: false, reason: "duplicate_name" };
+      throw appError(
+        "Đã có món hệ thống trùng tên. Vui lòng đặt tên khác.",
+        409,
+      );
     }
 
-    try {
-      const updated = await dishRepository.updateGlobalDishWithNutrients({
-        dishId,
-        name: trimmedName,
-        imageUrl,
-        nutrients,
-      });
-      if (!updated) return { ok: false, reason: "not_found" };
+    const updated = await dishRepository.updateGlobalDishWithNutrients({
+      dishId,
+      name: trimmedName,
+      imageUrl,
+      nutrients,
+    });
+    if (!updated) throw appError("Không tìm thấy món hệ thống", 404);
 
-      return {
-        ok: true,
-        dish: toDishSummary(updated),
-        oldImageUrl: existing.image_url,
-      };
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        return { ok: false, reason: "duplicate_name" };
-      }
-      throw error;
-    }
+    return { dish: toDishSummary(updated), oldImageUrl: existing.image_url };
   },
 
+
+  // (Admin) xóa món hệ thống
   async removeGlobalDish(
     dishId: number,
-  ): Promise<
-    { ok: true; imageUrl: string | null } | { ok: false; reason: "not_found" }
-  > {
+  ): Promise<{ imageUrl: string | null }> {
     const deleted = await dishRepository.deleteGlobalDishWithCleanup(dishId);
-    if (!deleted) return { ok: false, reason: "not_found" };
-    return { ok: true, imageUrl: deleted.image_url };
+    if (!deleted) throw appError("Không tìm thấy món hệ thống", 404);
+    return { imageUrl: deleted.image_url };
   },
 };

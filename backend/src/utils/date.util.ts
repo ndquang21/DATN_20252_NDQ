@@ -1,4 +1,4 @@
-// Chuyển chuỗi "YYYY-MM-DD" thành Date (theo UTC, không lệ thuộc múi giờ máy).
+// Chuyển chuỗi "YYYY-MM-DD" thành Date (theo UTC).
 export function parseDateOnly(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00.000Z`);
 }

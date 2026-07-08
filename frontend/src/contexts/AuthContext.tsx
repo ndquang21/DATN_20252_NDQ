@@ -1,14 +1,16 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { authService } from "../services/auth.service";
+import { userService } from "../services/user.service";
 
 type User = {
   user_id: number;
   email: string;
   username?: string;
-  avatar_url?: string;
   role: string;
+  avatar_url?: string;
 };
 
+// Định nghĩa dữ liệu và hàm mà Context sẽ cung cấp cho hệ thống
 type AuthContextType = {
   user: User | null;
   isAuthenticated: boolean;
@@ -25,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Xóa thông tin khi đăng xuất
     const handleAuthLogout = () => {
       setUser(null);
       localStorage.removeItem("accessToken");
@@ -32,10 +35,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("user");
     };
 
+    // Khôi phục phiên từ localStorage
     const restoreSession = async () => {
       const refreshToken = localStorage.getItem("refreshToken");
       const savedUser = localStorage.getItem("user");
 
+      // Không có thông tin thì đăng xuất
       if (!refreshToken || !savedUser) {
         handleAuthLogout();
         setIsLoading(false);
@@ -43,22 +48,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
+        // Khôi phục nhanh thông tin người dùng từ bộ nhớ tạm
         const parsedUser = JSON.parse(savedUser) as User;
         setUser(parsedUser);
 
-        const response = await authService.me();
+        // Gọi API xác thực đồng bộ thông tin mới nhất
+        const response = await userService.getProfile();
         const currentUser = response.data.user;
-
         setUser(currentUser);
+
+        // Cập nhật dữ liệu người dùng mới nhất vào localStorage
         localStorage.setItem("user", JSON.stringify(currentUser));
       } catch {
+        // Nếu API trả về lỗi thì đăng xuất
         handleAuthLogout();
       } finally {
         setIsLoading(false);
       }
     };
 
+    // lắng nghe sự kiện "auth:logout" (api.ts)
     window.addEventListener("auth:logout", handleAuthLogout);
+
+    // Khôi phục phiên
     void restoreSession();
 
     return () => {
@@ -77,7 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const refreshToken = localStorage.getItem("refreshToken");
 
     try {
-      if (refreshToken) {        await authService.logout(refreshToken);
+      if (refreshToken) {
+        await authService.logout(refreshToken);
       }
     } catch (err) {
       console.error("Logout request failed:", err);

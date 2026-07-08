@@ -11,7 +11,7 @@ export default function NotFound() {
           Không tìm thấy trang
         </h1>
         <p className="mt-3 text-slate-600">
-          Trang bạn truy cập không tồn tại hoặc đã bị di chuyển.
+          Trang bạn truy cập không tồn tại.
         </p>
         <Link
           to="/"
