@@ -35,7 +35,7 @@ export const userService = {
     return userRepository.findById(userId);
   },
 
-  // Công thức tính TDEE từ hồ sơ
+  // Tính TDEE
   calculateTdee(user: TdeeInput) {
     if (!user.dob || !user.height || !user.weight || !user.gender || !user.activity_level || !user.goal) {
       return null;
